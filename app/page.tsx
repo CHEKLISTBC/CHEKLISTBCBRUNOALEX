@@ -39,22 +39,22 @@ const REGRAS_SUPERVISAO = [
   'Estou ciente de que o uniforme deve estar bem limpo e passado.',
 ];
 
-export default function DashboardChecklistCountry() {
+export default function DashboardCountry() {
   const [abaAtiva, setAbaAtiva] = useState<'operador' | 'gestor'>('operador');
   const [subAbaGestor, setSubAbaGestor] = useState<'relatorios' | 'usuarios' | 'checklists'>('relatorios');
 
-  // Autenticação Gestor
+  // Autenticação
   const [gestorAutenticado, setGestorAutenticado] = useState(false);
   const [senhaInput, setSenhaInput] = useState('');
   const [erroSenha, setErroSenha] = useState(false);
 
-  // Estados dos Dados
+  // Estados principais
   const [pdvs] = useState<string[]>(LISTA_PDVS_ORIGINAL);
   const [itensChecklist, setItensChecklist] = useState<string[]>(ITENS_PADRAO);
   const [usuariosCadastrados, setUsuariosCadastrados] = useState<{ id: string; nome: string; cargo: string }[]>([]);
   const [historico, setHistorico] = useState<any[]>([]);
 
-  // Formulário Operador
+  // Formulário do Operador
   const [pdvSelecionado, setPdvSelecionado] = useState(LISTA_PDVS_ORIGINAL[0]);
   const [tipoChecklist, setTipoChecklist] = useState('Abertura');
   const [operadorNome, setOperadorNome] = useState('');
@@ -62,7 +62,7 @@ export default function DashboardChecklistCountry() {
   const [supervisaoChecked, setSupervisaoChecked] = useState(false);
   const [regrasChecked, setRegrasChecked] = useState<{ [key: number]: boolean }>({});
 
-  // Filtros e Gestão
+  // Filtros e Edição do Gestor
   const [filtroPdvRelatorio, setFiltroPdvRelatorio] = useState('TODOS');
   const [novoUsuarioNome, setNovoUsuarioNome] = useState('');
   const [novoUsuarioCargo, setNovoUsuarioCargo] = useState('Operador de Bar');
@@ -70,23 +70,22 @@ export default function DashboardChecklistCountry() {
   const [itemEmEdicao, setItemEmEdicao] = useState<number | null>(null);
   const [textoEdicaoItem, setTextoEdicaoItem] = useState('');
 
-  // Feedback Visual
+  // UI
   const [mensagem, setMensagem] = useState<{ tipo: 'sucesso' | 'erro' | 'alerta'; texto: string } | null>(null);
   const [enviando, setEnviando] = useState(false);
 
-  // Carregamento Inicial
+  // Carregamento de dados salvos
   useEffect(() => {
-    const usuariosSalvos = localStorage.getItem('app_usuarios');
-    const itensSalvos = localStorage.getItem('app_checklist_itens');
-    const historicoSalvo = localStorage.getItem('app_checklists_local');
+    const u = localStorage.getItem('app_usuarios');
+    const i = localStorage.getItem('app_checklist_itens');
+    const h = localStorage.getItem('app_checklists_local');
 
-    if (usuariosSalvos) setUsuariosCadastrados(JSON.parse(usuariosSalvos));
-    if (itensSalvos) setItensChecklist(JSON.parse(itensSalvos));
-    if (historicoSalvo) setHistorico(JSON.parse(historicoSalvo));
+    if (u) setUsuariosCadastrados(JSON.parse(u));
+    if (i) setItensChecklist(JSON.parse(i));
+    if (h) setHistorico(JSON.parse(h));
   }, []);
 
-  // Salvamento Automático Local
-  const salvarAutomaticoLocal = (novosDados: any[]) => {
+  const salvarLocal = (novosDados: any[]) => {
     setHistorico(novosDados);
     localStorage.setItem('app_checklists_local', JSON.stringify(novosDados));
   };
@@ -102,43 +101,39 @@ export default function DashboardChecklistCountry() {
     }
   };
 
-  // Seleção exclusiva por Checkbox (Se já estiver selecionado, desmarca)
+  // Marcar/Desmarcar Checkbox dos Itens
   const handleCheckboxOption = (item: string, valor: string) => {
     setRespostas((prev) => {
       if (prev[item] === valor) {
-        const cop = { ...prev };
-        delete cop[item];
-        return cop;
+        const c = { ...prev };
+        delete c[item];
+        return c;
       }
       return { ...prev, [item]: valor };
     });
-  };
-
-  const handleRegraToggle = (index: number) => {
-    setRegrasChecked((prev) => ({ ...prev, [index]: !prev[index] }));
   };
 
   const handleSalvarChecklist = async (e: React.FormEvent) => {
     e.preventDefault();
     setMensagem(null);
 
-    const pendentes = itensChecklist.filter((item) => !respostas[item]);
+    const pendentes = itensChecklist.filter((i) => !respostas[i]);
     if (pendentes.length > 0) {
       setMensagem({
         tipo: 'erro',
-        texto: `🤠 Atenção, peão! Faltam ${pendentes.length} item(ns) para verificar.`,
+        texto: `🤠 Preencha todos os itens! Faltam ${pendentes.length} verificação(ões).`,
       });
       return;
     }
 
     if (!operadorNome.trim()) {
-      setMensagem({ tipo: 'erro', texto: 'Informe ou selecione o operador responsável!' });
+      setMensagem({ tipo: 'erro', texto: 'Selecione ou informe o nome do operador!' });
       return;
     }
 
     setEnviando(true);
 
-    const novoRegistro = {
+    const registro = {
       id: Date.now().toString(),
       pdv: pdvSelecionado,
       tipo_checklist: tipoChecklist,
@@ -148,31 +143,19 @@ export default function DashboardChecklistCountry() {
       criado_em: new Date().toISOString(),
     };
 
-    let bancoSincronizado = false;
-
+    let emNuvem = false;
     try {
-      const { error } = await supabase.from('checklists').insert([{
-        pdv: novoRegistro.pdv,
-        tipo_checklist: novoRegistro.tipo_checklist,
-        operador: novoRegistro.operador,
-        verificacao_supervisao: novoRegistro.verificacao_supervisao,
-        respostas_itens: novoRegistro.respostas_itens,
-        criado_em: novoRegistro.criado_em,
-      }]);
-
-      if (!error) bancoSincronizado = true;
+      const { error } = await supabase.from('checklists').insert([registro]);
+      if (!error) emNuvem = true;
     } catch (err) {
-      console.warn('Conexão remota indisponível. Armazenado localmente.');
+      console.warn('Banco offline. Salvo apenas no dispositivo.');
     }
 
-    const historicoAtualizado = [novoRegistro, ...historico];
-    salvarAutomaticoLocal(historicoAtualizado);
+    salvarLocal([registro, ...historico]);
 
     setMensagem({
-      tipo: bancoSincronizado ? 'sucesso' : 'alerta',
-      texto: bancoSincronizado
-        ? '🌾 Checklist salvo e sincronizado na estância!'
-        : '⚡ Salvo localmente na fazenda! (Aguardando rede)',
+      tipo: emNuvem ? 'sucesso' : 'alerta',
+      texto: emNuvem ? '🌾 Checklist gravado no banco de dados!' : '⚡ Salvo localmente na fazenda!',
     });
 
     setOperadorNome('');
@@ -185,42 +168,40 @@ export default function DashboardChecklistCountry() {
   const handleAdicionarItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoItemChecklist.trim()) return;
-
-    const listaAtualizada = [...itensChecklist, novoItemChecklist.trim()];
-    setItensChecklist(listaAtualizada);
-    localStorage.setItem('app_checklist_itens', JSON.stringify(listaAtualizada));
+    const nova = [...itensChecklist, novoItemChecklist.trim()];
+    setItensChecklist(nova);
+    localStorage.setItem('app_checklist_itens', JSON.stringify(nova));
     setNovoItemChecklist('');
-    setMensagem({ tipo: 'sucesso', texto: 'Novo item incorporado ao checklist!' });
+    setMensagem({ tipo: 'sucesso', texto: 'Novo item adicionado ao checklist!' });
   };
 
   const handleSalvarEdicaoItem = (index: number) => {
     if (!textoEdicaoItem.trim()) return;
-    const listaAtualizada = [...itensChecklist];
-    listaAtualizada[index] = textoEdicaoItem.trim();
-    setItensChecklist(listaAtualizada);
-    localStorage.setItem('app_checklist_itens', JSON.stringify(listaAtualizada));
+    const nova = [...itensChecklist];
+    nova[index] = textoEdicaoItem.trim();
+    setItensChecklist(nova);
+    localStorage.setItem('app_checklist_itens', JSON.stringify(nova));
     setItemEmEdicao(null);
     setTextoEdicaoItem('');
     setMensagem({ tipo: 'sucesso', texto: 'Item renomeado com sucesso!' });
   };
 
   const handleExcluirItem = (index: number) => {
-    const listaAtualizada = itensChecklist.filter((_, i) => i !== index);
-    setItensChecklist(listaAtualizada);
-    localStorage.setItem('app_checklist_itens', JSON.stringify(listaAtualizada));
-    setMensagem({ tipo: 'sucesso', texto: 'Item removido do checklist!' });
+    const nova = itensChecklist.filter((_, i) => i !== index);
+    setItensChecklist(nova);
+    localStorage.setItem('app_checklist_itens', JSON.stringify(nova));
+    setMensagem({ tipo: 'sucesso', texto: 'Item excluído!' });
   };
 
   const handleCadastrarUsuario = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoUsuarioNome.trim()) return;
-
     const novo = { id: Date.now().toString(), nome: novoUsuarioNome.trim(), cargo: novoUsuarioCargo };
-    const listaAtualizada = [novo, ...usuariosCadastrados];
-    setUsuariosCadastrados(listaAtualizada);
-    localStorage.setItem('app_usuarios', JSON.stringify(listaAtualizada));
+    const nova = [novo, ...usuariosCadastrados];
+    setUsuariosCadastrados(nova);
+    localStorage.setItem('app_usuarios', JSON.stringify(nova));
     setNovoUsuarioNome('');
-    setMensagem({ tipo: 'sucesso', texto: 'Usuário registrado na tropa!' });
+    setMensagem({ tipo: 'sucesso', texto: 'Usuário cadastrado com sucesso!' });
   };
 
   const relatoriosFiltrados = historico.filter((item) =>
@@ -228,29 +209,27 @@ export default function DashboardChecklistCountry() {
   );
 
   return (
-    <div className="min-h-screen bg-[#18100a] text-[#f4eae1] py-6 px-3 sm:px-6 font-sans antialiased">
-      <div className="max-w-5xl mx-auto bg-[#26180f] rounded-3xl shadow-2xl border-2 border-[#6e4323] overflow-hidden">
+    <div className="min-h-screen bg-[#120a05] text-[#f4eae1] py-6 px-3 sm:px-6 font-sans">
+      <div className="max-w-4xl mx-auto bg-[#211209] rounded-3xl shadow-2xl border-2 border-[#573016] overflow-hidden">
         
-        {/* Cabeçalho Estilo Country Premium */}
-        <header className="bg-gradient-to-r from-[#3b2011] via-[#522e17] to-[#3b2011] p-6 border-b-2 border-[#6e4323] flex flex-col sm:flex-row justify-between items-center gap-4 text-center sm:text-left">
+        {/* Cabeçalho Limpo sem SVGs Gigantes */}
+        <header className="bg-gradient-to-r from-[#31180b] via-[#482411] to-[#31180b] p-5 border-b-2 border-[#573016] flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
-            <div className="text-4xl p-2 bg-[#18100a]/50 rounded-2xl border border-[#b8860b]">🤠</div>
+            <span className="text-3xl p-2 bg-[#120a05]/60 rounded-xl border border-[#b8860b]">🤠</span>
             <div>
-              <h1 className="text-2xl font-black text-[#d4af37] tracking-wider uppercase font-serif">
-                Gestão & Checklist Fazenda
+              <h1 className="text-xl sm:text-2xl font-black text-[#d4af37] uppercase tracking-wide font-serif">
+                Dashboard Fazenda
               </h1>
-              <p className="text-xs text-[#c29b7f] font-medium">Controle Operacional dos Pontos de Venda</p>
+              <p className="text-xs text-[#b88c6e]">Controle Operacional dos PDVs</p>
             </div>
           </div>
 
-          <nav className="flex p-1.5 bg-[#18100a] rounded-2xl border border-[#6e4323] gap-1">
+          <nav className="flex bg-[#120a05] p-1.5 rounded-xl border border-[#573016] gap-1">
             <button
               type="button"
               onClick={() => setAbaAtiva('operador')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
-                abaAtiva === 'operador'
-                  ? 'bg-[#8b4513] text-white shadow-md border border-[#d4af37]'
-                  : 'text-[#a0826c] hover:text-white'
+              className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider ${
+                abaAtiva === 'operador' ? 'bg-[#7a3d13] text-white border border-[#d4af37]' : 'text-[#8c6b53]'
               }`}
             >
               📋 Operação
@@ -258,10 +237,8 @@ export default function DashboardChecklistCountry() {
             <button
               type="button"
               onClick={() => setAbaAtiva('gestor')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
-                abaAtiva === 'gestor'
-                  ? 'bg-[#8b4513] text-white shadow-md border border-[#d4af37]'
-                  : 'text-[#a0826c] hover:text-white'
+              className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider ${
+                abaAtiva === 'gestor' ? 'bg-[#7a3d13] text-white border border-[#d4af37]' : 'text-[#8c6b53]'
               }`}
             >
               ⚙️ Gestor
@@ -269,11 +246,10 @@ export default function DashboardChecklistCountry() {
           </nav>
         </header>
 
-        <main className="p-4 sm:p-8">
-          {/* Mensagens de Notificação */}
+        <main className="p-4 sm:p-6">
           {mensagem && (
             <div
-              className={`mb-6 p-4 rounded-2xl text-xs font-bold border flex justify-between items-center shadow-lg ${
+              className={`mb-5 p-3.5 rounded-xl text-xs font-bold border flex justify-between items-center ${
                 mensagem.tipo === 'sucesso'
                   ? 'bg-[#1b3820] border-[#388e3c] text-[#a5d6a7]'
                   : mensagem.tipo === 'alerta'
@@ -282,27 +258,23 @@ export default function DashboardChecklistCountry() {
               }`}
             >
               <span>{mensagem.texto}</span>
-              <button type="button" onClick={() => setMensagem(null)} className="text-sm font-bold opacity-80 hover:opacity-100">✕</button>
+              <button type="button" onClick={() => setMensagem(null)} className="font-bold">✕</button>
             </div>
           )}
 
-          {/* ABA OPERADOR */}
+          {/* OPERAÇÃO */}
           {abaAtiva === 'operador' && (
-            <form onSubmit={handleSalvarChecklist} className="space-y-6">
+            <form onSubmit={handleSalvarChecklist} className="space-y-5">
               
-              {/* Dados Principais */}
-              <div className="bg-[#18100a] p-5 rounded-2xl border border-[#522e17] space-y-4 shadow-inner">
-                <h2 className="text-xs font-black uppercase tracking-wider text-[#d4af37]">
-                  📍 Dados da Operação
-                </h2>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-[#120a05] p-4 rounded-xl border border-[#482411] space-y-3">
+                <h2 className="text-xs font-black uppercase text-[#d4af37]">📍 Dados Principais</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-[#c29b7f] mb-1">Selecione o PDV</label>
+                    <label className="block text-[11px] font-bold text-[#b88c6e] mb-1">PDV</label>
                     <select
                       value={pdvSelecionado}
                       onChange={(e) => setPdvSelecionado(e.target.value)}
-                      className="w-full bg-[#26180f] border border-[#6e4323] rounded-xl p-3 text-xs text-white focus:outline-none focus:border-[#d4af37]"
+                      className="w-full bg-[#211209] border border-[#573016] rounded-lg p-2.5 text-xs text-white"
                     >
                       {pdvs.map((p) => (
                         <option key={p} value={p}>{p}</option>
@@ -311,11 +283,11 @@ export default function DashboardChecklistCountry() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-[#c29b7f] mb-1">Turno</label>
+                    <label className="block text-[11px] font-bold text-[#b88c6e] mb-1">Turno</label>
                     <select
                       value={tipoChecklist}
                       onChange={(e) => setTipoChecklist(e.target.value)}
-                      className="w-full bg-[#26180f] border border-[#6e4323] rounded-xl p-3 text-xs text-white focus:outline-none focus:border-[#d4af37]"
+                      className="w-full bg-[#211209] border border-[#573016] rounded-lg p-2.5 text-xs text-white"
                     >
                       <option value="Abertura">Abertura</option>
                       <option value="Fechamento">Fechamento</option>
@@ -323,15 +295,15 @@ export default function DashboardChecklistCountry() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-[#c29b7f] mb-1">Operador Responsável</label>
+                    <label className="block text-[11px] font-bold text-[#b88c6e] mb-1">Operador</label>
                     {usuariosCadastrados.length > 0 ? (
                       <select
                         value={operadorNome}
                         onChange={(e) => setOperadorNome(e.target.value)}
-                        className="w-full bg-[#26180f] border border-[#6e4323] rounded-xl p-3 text-xs text-white focus:outline-none focus:border-[#d4af37]"
+                        className="w-full bg-[#211209] border border-[#573016] rounded-lg p-2.5 text-xs text-white"
                         required
                       >
-                        <option value="">Selecione o peão/operador...</option>
+                        <option value="">Selecione...</option>
                         {usuariosCadastrados.map((u) => (
                           <option key={u.id} value={u.nome}>{u.nome} ({u.cargo})</option>
                         ))}
@@ -342,7 +314,7 @@ export default function DashboardChecklistCountry() {
                         placeholder="Nome do operador"
                         value={operadorNome}
                         onChange={(e) => setOperadorNome(e.target.value)}
-                        className="w-full bg-[#26180f] border border-[#6e4323] rounded-xl p-3 text-xs text-white focus:outline-none focus:border-[#d4af37]"
+                        className="w-full bg-[#211209] border border-[#573016] rounded-lg p-2.5 text-xs text-white"
                         required
                       />
                     )}
@@ -350,75 +322,65 @@ export default function DashboardChecklistCountry() {
                 </div>
               </div>
 
-              {/* Itens do Checklist com Caixas Checkbox */}
-              <div className="space-y-3">
-                <h2 className="text-xs font-black uppercase tracking-wider text-[#d4af37]">
-                  📝 Itens de Verificação
-                </h2>
+              {/* LISTA DE CONFERÊNCIA COM CHECKBOXES */}
+              <div className="space-y-2.5">
+                <h2 className="text-xs font-black uppercase text-[#d4af37]">📝 Conferencia de Itens</h2>
+                {itensChecklist.map((item, idx) => (
+                  <div key={idx} className="p-3 bg-[#120a05] rounded-xl border border-[#482411] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                    <span className="text-xs font-bold text-slate-100">{idx + 1}. {item}</span>
 
-                <div className="space-y-2.5">
-                  {itensChecklist.map((item, idx) => (
-                    <div key={idx} className="p-4 bg-[#18100a] rounded-2xl border border-[#522e17] flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                      <span className="text-xs font-bold text-white leading-relaxed">{idx + 1}. {item}</span>
-
-                      {/* Opções Estilo Checkbox */}
-                      <div className="grid grid-cols-3 gap-2 w-full md:w-auto">
-                        {[
-                          { label: 'Conforme', val: 'Conforme', style: 'border-[#2e7d32] text-[#81c784] bg-[#1b3820]/40' },
-                          { label: 'Ñ Conforme', val: 'Não Conforme', style: 'border-[#c62828] text-[#ef9a9a] bg-[#3b1212]/40' },
-                          { label: 'N/A', val: 'Não se aplica', style: 'border-[#6e4323] text-[#c29b7f] bg-[#26180f]' },
-                        ].map((box) => {
-                          const estaMarcado = respostas[item] === box.val;
-                          return (
-                            <label
-                              key={box.val}
-                              className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border cursor-pointer select-none transition-all ${
-                                estaMarcado
-                                  ? `${box.style} border-2 shadow-lg ring-1 ring-[#d4af37]`
-                                  : 'bg-[#26180f] border-[#522e17] text-[#a0826c] hover:border-[#6e4323]'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={estaMarcado}
-                                onChange={() => handleCheckboxOption(item, box.val)}
-                                className="w-4 h-4 rounded accent-[#8b4513] cursor-pointer"
-                              />
-                              <span className="text-[11px] font-black uppercase">{box.label}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
+                    <div className="grid grid-cols-3 gap-1.5 w-full sm:w-auto">
+                      {[
+                        { label: 'Conforme', val: 'Conforme', active: 'border-[#2e7d32] bg-[#1b3820] text-[#a5d6a7]' },
+                        { label: 'Ñ Conforme', val: 'Não Conforme', active: 'border-[#c62828] bg-[#3b1212] text-[#ef9a9a]' },
+                        { label: 'N/A', val: 'Não se aplica', active: 'border-[#573016] bg-[#211209] text-[#b88c6e]' },
+                      ].map((box) => {
+                        const checked = respostas[item] === box.val;
+                        return (
+                          <label
+                            key={box.val}
+                            className={`flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg border cursor-pointer text-[11px] font-black ${
+                              checked ? `${box.active} border-2 shadow` : 'bg-[#211209] border-[#482411] text-[#8c6b53]'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => handleCheckboxOption(item, box.val)}
+                              className="w-3.5 h-3.5 accent-[#7a3d13]"
+                            />
+                            <span>{box.label}</span>
+                          </label>
+                        );
+                      })}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
 
-              {/* Supervisão e Regras */}
-              <div className="bg-[#18100a] p-5 rounded-2xl border border-[#522e17] space-y-4">
-                <label className="flex items-center gap-3 cursor-pointer p-3 bg-[#26180f] rounded-xl border border-[#6e4323]">
+              {/* REGRAS */}
+              <div className="bg-[#120a05] p-4 rounded-xl border border-[#482411] space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer p-2 bg-[#211209] rounded-lg border border-[#573016]">
                   <input
                     type="checkbox"
                     checked={supervisaoChecked}
                     onChange={(e) => setSupervisaoChecked(e.target.checked)}
-                    className="w-5 h-5 rounded accent-[#8b4513] cursor-pointer"
+                    className="w-4 h-4 accent-[#7a3d13]"
                   />
-                  <span className="text-xs font-black uppercase text-[#d4af37]">
-                    Verificação de Supervisão Realizada
-                  </span>
+                  <span className="text-xs font-black uppercase text-[#d4af37]">Supervisão Realizada</span>
                 </label>
 
-                <div className="space-y-2 pt-2">
+                <div className="space-y-1.5">
                   {REGRAS_SUPERVISAO.map((regra, index) => (
-                    <label key={index} className="flex items-start gap-3 cursor-pointer">
+                    <label key={index} className="flex items-start gap-2 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={!!regrasChecked[index]}
-                        onChange={() => handleRegraToggle(index)}
-                        className="w-4 h-4 mt-0.5 rounded accent-[#8b4513] cursor-pointer"
+                        onChange={() => setRegrasChecked((p) => ({ ...p, [index]: !p[index] }))}
+                        className="w-3.5 h-3.5 mt-0.5 accent-[#7a3d13]"
                         required
                       />
-                      <span className="text-xs font-medium text-[#c29b7f]">{regra}</span>
+                      <span className="text-[11px] text-[#b88c6e]">{regra}</span>
                     </label>
                   ))}
                 </div>
@@ -427,58 +389,49 @@ export default function DashboardChecklistCountry() {
               <button
                 type="submit"
                 disabled={enviando}
-                className="w-full bg-gradient-to-r from-[#8b4513] via-[#a0522d] to-[#8b4513] hover:from-[#a0522d] hover:to-[#8b4513] text-white font-black py-4 rounded-2xl shadow-xl border-2 border-[#d4af37] text-xs uppercase tracking-wider transition-all"
+                className="w-full bg-[#7a3d13] hover:bg-[#8f4817] text-white font-black py-3.5 rounded-xl border border-[#d4af37] text-xs uppercase tracking-wider shadow-lg"
               >
-                {enviando ? 'Salvando...' : '🌾 Salvar Checklist da Fazenda'}
+                {enviando ? 'Gravando...' : '🌾 Salvar Checklist'}
               </button>
             </form>
           )}
 
-          {/* ABA GESTOR */}
+          {/* GESTOR */}
           {abaAtiva === 'gestor' && (
             <div>
               {!gestorAutenticado ? (
-                /* Login de Segurança */
-                <form onSubmit={handleLoginGestor} className="max-w-sm mx-auto my-10 bg-[#18100a] p-6 rounded-2xl border border-[#6e4323] text-center space-y-4 shadow-xl">
-                  <div className="text-4xl">🔐</div>
-                  <h2 className="text-sm font-black text-[#d4af37] uppercase tracking-wider">Painel do Gestor</h2>
-                  <p className="text-xs text-[#c29b7f]">Digite a senha de administrador para acessar os relatórios.</p>
-
+                <form onSubmit={handleLoginGestor} className="max-w-xs mx-auto my-8 bg-[#120a05] p-5 rounded-xl border border-[#573016] text-center space-y-3">
+                  <span className="text-3xl">🔑</span>
+                  <h2 className="text-xs font-black text-[#d4af37] uppercase">Painel do Gestor</h2>
                   <input
                     type="password"
-                    placeholder="Senha de acesso"
+                    placeholder="Senha (admin123)"
                     value={senhaInput}
                     onChange={(e) => setSenhaInput(e.target.value)}
-                    className="w-full bg-[#26180f] border border-[#6e4323] rounded-xl p-3 text-xs text-white text-center focus:outline-none focus:border-[#d4af37]"
+                    className="w-full bg-[#211209] border border-[#573016] rounded-lg p-2 text-xs text-white text-center"
                   />
-
-                  {erroSenha && <p className="text-[11px] text-[#ef9a9a] font-bold">Senha incorreta. Tente admin123</p>}
-
-                  <button
-                    type="submit"
-                    className="w-full bg-[#8b4513] hover:bg-[#a0522d] text-white font-black py-3 rounded-xl text-xs uppercase tracking-wider border border-[#d4af37]"
-                  >
-                    Entrar no Painel
+                  {erroSenha && <p className="text-[10px] text-rose-400 font-bold">Senha Incorreta!</p>}
+                  <button type="submit" className="w-full bg-[#7a3d13] text-white font-bold py-2 rounded-lg text-xs uppercase border border-[#d4af37]">
+                    Acessar
                   </button>
                 </form>
               ) : (
-                /* Sub-abas do Gestor */
-                <div className="space-y-6">
-                  <div className="flex border-b border-[#522e17] pb-3 gap-2 overflow-x-auto">
+                <div className="space-y-5">
+                  <div className="flex border-b border-[#482411] pb-2 gap-2 overflow-x-auto">
                     <button
                       type="button"
                       onClick={() => setSubAbaGestor('relatorios')}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase whitespace-nowrap transition-all ${
-                        subAbaGestor === 'relatorios' ? 'bg-[#8b4513] text-white border border-[#d4af37]' : 'bg-[#18100a] text-[#a0826c] border border-[#522e17]'
+                      className={`px-3 py-2 rounded-lg text-xs font-bold uppercase whitespace-nowrap ${
+                        subAbaGestor === 'relatorios' ? 'bg-[#7a3d13] text-white border border-[#d4af37]' : 'bg-[#120a05] text-[#8c6b53]'
                       }`}
                     >
-                      📊 Acompanhamento PDV
+                      📊 Relatórios
                     </button>
                     <button
                       type="button"
                       onClick={() => setSubAbaGestor('checklists')}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase whitespace-nowrap transition-all ${
-                        subAbaGestor === 'checklists' ? 'bg-[#8b4513] text-white border border-[#d4af37]' : 'bg-[#18100a] text-[#a0826c] border border-[#522e17]'
+                      className={`px-3 py-2 rounded-lg text-xs font-bold uppercase whitespace-nowrap ${
+                        subAbaGestor === 'checklists' ? 'bg-[#7a3d13] text-white border border-[#d4af37]' : 'bg-[#120a05] text-[#8c6b53]'
                       }`}
                     >
                       📝 Gerenciar Checklists
@@ -486,139 +439,90 @@ export default function DashboardChecklistCountry() {
                     <button
                       type="button"
                       onClick={() => setSubAbaGestor('usuarios')}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase whitespace-nowrap transition-all ${
-                        subAbaGestor === 'usuarios' ? 'bg-[#8b4513] text-white border border-[#d4af37]' : 'bg-[#18100a] text-[#a0826c] border border-[#522e17]'
+                      className={`px-3 py-2 rounded-lg text-xs font-bold uppercase whitespace-nowrap ${
+                        subAbaGestor === 'usuarios' ? 'bg-[#7a3d13] text-white border border-[#d4af37]' : 'bg-[#120a05] text-[#8c6b53]'
                       }`}
                     >
-                      🤠 Cadastrar Usuários
+                      👥 Usuários
                     </button>
                   </div>
 
-                  {/* RELATÓRIOS E IMPRESSÃO / PDF */}
                   {subAbaGestor === 'relatorios' && (
-                    <div className="space-y-4">
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#18100a] p-4 rounded-2xl border border-[#522e17] gap-3">
-                        <div className="w-full sm:w-auto">
-                          <label className="block text-[11px] font-black text-[#d4af37] uppercase mb-1">Filtrar por PDV</label>
-                          <select
-                            value={filtroPdvRelatorio}
-                            onChange={(e) => setFiltroPdvRelatorio(e.target.value)}
-                            className="w-full sm:w-64 bg-[#26180f] border border-[#6e4323] rounded-xl p-2.5 text-xs text-white"
-                          >
-                            <option value="TODOS">Todos os Pontos de Venda</option>
-                            {pdvs.map((p) => (
-                              <option key={p} value={p}>{p}</option>
-                            ))}
-                          </select>
-                        </div>
-
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center bg-[#120a05] p-3 rounded-xl border border-[#482411]">
+                        <select
+                          value={filtroPdvRelatorio}
+                          onChange={(e) => setFiltroPdvRelatorio(e.target.value)}
+                          className="bg-[#211209] border border-[#573016] rounded-lg p-2 text-xs text-white"
+                        >
+                          <option value="TODOS">Todos os PDVs</option>
+                          {pdvs.map((p) => (
+                            <option key={p} value={p}>{p}</option>
+                          ))}
+                        </select>
                         <button
                           type="button"
                           onClick={() => window.print()}
-                          className="bg-[#8b4513] hover:bg-[#a0522d] text-white text-xs px-4 py-2.5 rounded-xl font-black border border-[#d4af37]"
+                          className="bg-[#7a3d13] text-white text-xs px-3 py-2 rounded-lg font-bold border border-[#d4af37]"
                         >
-                          🖨️ Imprimir / Baixar PDF
+                          🖨️ Imprimir / PDF
                         </button>
                       </div>
 
-                      {/* Lista de Registros */}
-                      {relatoriosFiltrados.length === 0 ? (
-                        <div className="text-center py-10 text-[#a0826c] text-xs">Nenhum registro encontrado para este filtro.</div>
-                      ) : (
-                        <div className="space-y-3">
-                          {relatoriosFiltrados.map((reg) => (
-                            <div key={reg.id || reg.criado_em} className="p-4 bg-[#18100a] rounded-2xl border border-[#522e17] space-y-3">
-                              <div className="flex justify-between items-center border-b border-[#3b2011] pb-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold text-[#d4af37] text-xs">{reg.pdv}</span>
-                                  <span className="text-[10px] bg-[#8b4513]/30 text-[#d4af37] border border-[#6e4323] px-2 py-0.5 rounded-full font-bold">
-                                    {reg.tipo_checklist}
-                                  </span>
-                                </div>
-                                <span className="text-[10px] text-[#a0826c]">
-                                  {new Date(reg.criado_em).toLocaleString('pt-BR')}
-                                </span>
+                      {relatoriosFiltrados.map((reg) => (
+                        <div key={reg.id || reg.criado_em} className="p-3 bg-[#120a05] rounded-xl border border-[#482411] space-y-2">
+                          <div className="flex justify-between text-xs border-b border-[#31180b] pb-1">
+                            <span className="font-bold text-[#d4af37]">{reg.pdv} ({reg.tipo_checklist})</span>
+                            <span className="text-[10px] text-[#8c6b53]">{new Date(reg.criado_em).toLocaleString('pt-BR')}</span>
+                          </div>
+                          <p className="text-xs text-slate-200"><strong>Operador:</strong> {reg.operador}</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            {Object.entries(reg.respostas_itens || {}).map(([k, v]: any) => (
+                              <div key={k} className="flex justify-between text-[11px] p-1.5 bg-[#211209] rounded-lg border border-[#31180b]">
+                                <span className="text-[#b88c6e] truncate mr-2">{k}</span>
+                                <span className={`font-bold ${v === 'Conforme' ? 'text-[#a5d6a7]' : v === 'Não Conforme' ? 'text-[#ef9a9a]' : 'text-[#8c6b53]'}`}>{v}</span>
                               </div>
-
-                              <p className="text-xs text-white">
-                                <strong className="text-[#c29b7f]">Operador:</strong> {reg.operador}
-                              </p>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                                {Object.entries(reg.respostas_itens || {}).map(([k, v]: any) => (
-                                  <div key={k} className="flex justify-between text-[11px] p-2 bg-[#26180f] rounded-xl border border-[#522e17]">
-                                    <span className="text-[#c29b7f] truncate mr-2">{k}</span>
-                                    <span className={`font-bold ${v === 'Conforme' ? 'text-[#81c784]' : v === 'Não Conforme' ? 'text-[#ef9a9a]' : 'text-[#a0826c]'}`}>
-                                      {v}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
-                      )}
+                      ))}
                     </div>
                   )}
 
-                  {/* GERENCIAR CHECKLISTS (EDITAR / APAGAR / NOVO) */}
                   {subAbaGestor === 'checklists' && (
-                    <div className="space-y-6">
-                      <form onSubmit={handleAdicionarItem} className="space-y-3 bg-[#18100a] p-4 rounded-2xl border border-[#522e17]">
-                        <h2 className="text-xs font-black text-[#d4af37] uppercase">Cadastrar Novo Item no Checklist</h2>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            placeholder="Ex: Verificar selagem dos recipientes"
-                            value={novoItemChecklist}
-                            onChange={(e) => setNovoItemChecklist(e.target.value)}
-                            className="flex-1 bg-[#26180f] border border-[#6e4323] rounded-xl p-2.5 text-xs text-white"
-                            required
-                          />
-                          <button
-                            type="submit"
-                            className="bg-[#8b4513] hover:bg-[#a0522d] text-white font-black px-4 py-2.5 rounded-xl text-xs uppercase border border-[#d4af37]"
-                          >
-                            ➕ Adicionar
-                          </button>
-                        </div>
+                    <div className="space-y-4">
+                      <form onSubmit={handleAdicionarItem} className="flex gap-2 bg-[#120a05] p-3 rounded-xl border border-[#482411]">
+                        <input
+                          type="text"
+                          placeholder="Novo item..."
+                          value={novoItemChecklist}
+                          onChange={(e) => setNovoItemChecklist(e.target.value)}
+                          className="flex-1 bg-[#211209] border border-[#573016] rounded-lg p-2 text-xs text-white"
+                          required
+                        />
+                        <button type="submit" className="bg-[#7a3d13] text-white px-3 py-2 rounded-lg text-xs font-bold border border-[#d4af37]">Adicionar</button>
                       </form>
 
-                      <div className="space-y-2">
-                        <h3 className="text-xs font-black text-[#d4af37] uppercase tracking-wider">
-                          Itens de Checklist Ativos ({itensChecklist.length})
-                        </h3>
+                      <div className="space-y-1.5">
                         {itensChecklist.map((item, idx) => (
-                          <div key={idx} className="p-3 bg-[#18100a] rounded-xl border border-[#522e17] flex justify-between items-center gap-2 text-xs">
+                          <div key={idx} className="p-2.5 bg-[#120a05] rounded-lg border border-[#482411] flex justify-between items-center text-xs">
                             {itemEmEdicao === idx ? (
                               <div className="flex-1 flex gap-2">
                                 <input
                                   type="text"
                                   value={textoEdicaoItem}
                                   onChange={(e) => setTextoEdicaoItem(e.target.value)}
-                                  className="flex-1 bg-[#26180f] border border-[#d4af37] rounded-lg p-2 text-xs text-white"
+                                  className="flex-1 bg-[#211209] border border-[#d4af37] rounded p-1 text-xs text-white"
                                 />
-                                <button type="button" onClick={() => handleSalvarEdicaoItem(idx)} className="bg-[#2e7d32] text-white px-3 py-1.5 rounded-lg font-bold">Salvar</button>
-                                <button type="button" onClick={() => setItemEmEdicao(null)} className="bg-[#3e2723] text-white px-3 py-1.5 rounded-lg">Cancelar</button>
+                                <button type="button" onClick={() => handleSalvarEdicaoItem(idx)} className="bg-[#2e7d32] text-white px-2 py-1 rounded">Salvar</button>
+                                <button type="button" onClick={() => setItemEmEdicao(null)} className="bg-[#3b1212] text-white px-2 py-1 rounded">Sair</button>
                               </div>
                             ) : (
                               <>
-                                <span className="text-white font-medium"><strong className="text-[#d4af37] mr-2">{idx + 1}.</strong>{item}</span>
-                                <div className="flex gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => { setItemEmEdicao(idx); setTextoEdicaoItem(item); }}
-                                    className="bg-[#26180f] text-[#d4af37] border border-[#6e4323] px-2.5 py-1 rounded-lg text-[11px] font-bold"
-                                  >
-                                    ✏️ Renomear
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleExcluirItem(idx)}
-                                    className="bg-[#3b1212] text-[#ef9a9a] border border-[#c62828] px-2.5 py-1 rounded-lg text-[11px] font-bold"
-                                  >
-                                    🗑️ Apagar
-                                  </button>
+                                <span><strong className="text-[#d4af37] mr-1.5">{idx + 1}.</strong>{item}</span>
+                                <div className="flex gap-1">
+                                  <button type="button" onClick={() => { setItemEmEdicao(idx); setTextoEdicaoItem(item); }} className="bg-[#211209] text-[#d4af37] px-2 py-1 rounded border border-[#573016] text-[10px]">✏️ Editar</button>
+                                  <button type="button" onClick={() => handleExcluirItem(idx)} className="bg-[#3b1212] text-[#ef9a9a] px-2 py-1 rounded border border-[#c62828] text-[10px]">🗑️ Excluir</button>
                                 </div>
                               </>
                             )}
@@ -628,49 +532,30 @@ export default function DashboardChecklistCountry() {
                     </div>
                   )}
 
-                  {/* CADASTRO DE USUÁRIOS */}
                   {subAbaGestor === 'usuarios' && (
-                    <div className="space-y-6">
-                      <form onSubmit={handleCadastrarUsuario} className="space-y-4 bg-[#18100a] p-4 rounded-2xl border border-[#522e17]">
-                        <h2 className="text-xs font-black text-[#d4af37] uppercase">Cadastrar Novo Usuário</h2>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <input
-                            type="text"
-                            placeholder="Nome completo..."
-                            value={novoUsuarioNome}
-                            onChange={(e) => setNovoUsuarioNome(e.target.value)}
-                            className="bg-[#26180f] border border-[#6e4323] rounded-xl p-2.5 text-xs text-white"
-                            required
-                          />
-                          <select
-                            value={novoUsuarioCargo}
-                            onChange={(e) => setNovoUsuarioCargo(e.target.value)}
-                            className="bg-[#26180f] border border-[#6e4323] rounded-xl p-2.5 text-xs text-white"
-                          >
-                            <option value="Operador de Bar">Operador de Bar</option>
-                            <option value="Supervisor">Supervisor</option>
-                            <option value="Gerente">Gerente</option>
-                          </select>
-                        </div>
-                        <button type="submit" className="w-full bg-[#2e7d32] hover:bg-[#388e3c] text-white font-black py-2.5 rounded-xl text-xs uppercase border border-[#a5d6a7]">
-                          Cadastrar Usuário
-                        </button>
+                    <div className="space-y-4">
+                      <form onSubmit={handleCadastrarUsuario} className="space-y-2 bg-[#120a05] p-3 rounded-xl border border-[#482411]">
+                        <input
+                          type="text"
+                          placeholder="Nome..."
+                          value={novoUsuarioNome}
+                          onChange={(e) => setNovoUsuarioNome(e.target.value)}
+                          className="w-full bg-[#211209] border border-[#573016] rounded-lg p-2 text-xs text-white"
+                          required
+                        />
+                        <button type="submit" className="w-full bg-[#2e7d32] text-white font-bold py-2 rounded-lg text-xs uppercase">Cadastrar</button>
                       </form>
 
-                      <div className="space-y-2">
-                        <h3 className="text-xs font-black text-[#d4af37] uppercase">Usuários Cadastrados ({usuariosCadastrados.length})</h3>
+                      <div className="space-y-1.5">
                         {usuariosCadastrados.map((u) => (
-                          <div key={u.id} className="p-3 bg-[#18100a] rounded-xl border border-[#522e17] flex justify-between items-center text-xs">
-                            <span className="font-bold text-white">{u.nome}</span>
-                            <span className="bg-[#26180f] text-[#c29b7f] border border-[#6e4323] px-2.5 py-1 rounded-lg text-[10px]">
-                              {u.cargo}
-                            </span>
+                          <div key={u.id} className="p-2.5 bg-[#120a05] rounded-lg border border-[#482411] flex justify-between text-xs">
+                            <span className="font-bold">{u.nome}</span>
+                            <span className="text-[#b88c6e]">{u.cargo}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
-
                 </div>
               )}
             </div>
