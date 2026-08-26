@@ -261,3 +261,164 @@ export default function ChecklistApp() {
     </div>
   );
 }
+'use client';
+
+import React, { useState } from 'react';
+
+const ITENS_VERIFICACAO = [
+  'Layout organizado e limpo',
+  'Balcões limpos',
+  'Verificar freezers e geladeiras ligados',
+  'Geladeiras abastecidas e organizadas',
+  'Todos os utensílios da mise en place disponíveis',
+  'Bancadas organizadas',
+  'Computador apto para vendas',
+  'PDV limpo e organizado',
+  'Freezer de sorvete limpo e organizado',
+  'Verificar se todas as porções estão disponíveis',
+];
+
+const REGRAS_SUPERVISAO = [
+  'PROIBIDO uso de celular no local de trabalho e qualquer tipo de aparelho sonoro.',
+  'Estou ciente de que o uniforme deve estar bem limpo e passado.',
+];
+
+export default function ChecklistPDV() {
+  const [pdv, setPdv] = useState('Caipirodromo');
+  const [tipo, setTipo] = useState('Abertura');
+  const [operador, setOperador] = useState('');
+  const [respostas, setRespostas] = useState<{ [key: string]: string }>({});
+  const [verificacaoSupervisao, setVerificacaoSupervisao] = useState(false);
+
+  const handleOptionChange = (item: string, valor: string) => {
+    setRespostas((prev) => ({ ...prev, [item]: valor }));
+  };
+
+  const handleSalvar = (e: React.FormEvent) => {
+    e.preventDefault();
+    alert('Checklist salvo com sucesso!');
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-100 py-8 px-4 sm:px-6 lg:px-8 font-sans text-slate-800">
+      <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6 sm:p-8">
+        
+        {/* Cabeçalho */}
+        <div className="border-b pb-6 mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+            Checklist de Operações PDV
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">Preencha os dados e a verificação de rotina.</p>
+        </div>
+
+        <form onSubmit={handleSalvar} className="space-y-6">
+          
+          {/* Informações Gerais */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Selecione o PDV</label>
+              <select 
+                value={pdv} 
+                onChange={(e) => setPdv(e.target.value)}
+                className="w-full border-slate-300 rounded-md shadow-sm p-2 bg-white text-sm focus:ring-2 focus:ring-blue-500 border"
+              >
+                <option value="Caipirodromo">Caipirodromo</option>
+                <option value="Bar Central">Bar Central</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Tipo de Checklist</label>
+              <select 
+                value={tipo} 
+                onChange={(e) => setTipo(e.target.value)}
+                className="w-full border-slate-300 rounded-md shadow-sm p-2 bg-white text-sm focus:ring-2 focus:ring-blue-500 border"
+              >
+                <option value="Abertura">Abertura</option>
+                <option value="Fechamento">Fechamento</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Nome do Operador</label>
+              <input 
+                type="text" 
+                placeholder="Insira seu nome" 
+                value={operador}
+                onChange={(e) => setOperador(e.target.value)}
+                className="w-full border-slate-300 rounded-md shadow-sm p-2 text-sm focus:ring-2 focus:ring-blue-500 border"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Itens para Verificação */}
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 mb-3 border-b pb-2">Itens para Verificação</h2>
+            <div className="space-y-3">
+              {ITENS_VERIFICACAO.map((item, index) => (
+                <div key={index} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200 gap-2">
+                  <span className="text-sm font-medium text-slate-700">{item}</span>
+                  
+                  <div className="flex gap-1 sm:gap-2">
+                    {[
+                      { label: 'Conforme', value: 'C', color: 'peer-checked:bg-emerald-600 peer-checked:text-white hover:bg-emerald-50 text-emerald-700 border-emerald-300' },
+                      { label: 'Não Conforme', value: 'NC', color: 'peer-checked:bg-rose-600 peer-checked:text-white hover:bg-rose-50 text-rose-700 border-rose-300' },
+                      { label: 'N/A', value: 'NA', color: 'peer-checked:bg-slate-600 peer-checked:text-white hover:bg-slate-100 text-slate-600 border-slate-300' },
+                    ].map((opt) => (
+                      <label key={opt.value} className="cursor-pointer">
+                        <input 
+                          type="radio" 
+                          name={`item-${index}`} 
+                          value={opt.value}
+                          checked={respostas[item] === opt.value}
+                          onChange={() => handleOptionChange(item, opt.value)}
+                          className="peer hidden" 
+                        />
+                        <span className={`px-2.5 py-1 text-xs font-semibold rounded border transition-all inline-block ${opt.color}`}>
+                          {opt.label}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Double Check / Supervisão */}
+          <div className="pt-2">
+            <h2 className="text-lg font-bold text-slate-900 mb-3 border-b pb-2">Double Check / Supervisão / Gerência</h2>
+            
+            <label className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg cursor-pointer mb-4">
+              <input 
+                type="checkbox" 
+                checked={verificacaoSupervisao}
+                onChange={(e) => setVerificacaoSupervisao(e.target.checked)}
+                className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500" 
+              />
+              <span className="text-sm font-semibold text-amber-900">Verificação Supervisão</span>
+            </label>
+
+            <div className="space-y-2 bg-slate-50 p-4 rounded-lg border border-slate-200">
+              {REGRAS_SUPERVISAO.map((regra, index) => (
+                <label key={index} className="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4 mt-0.5 text-blue-600 rounded focus:ring-blue-500" required />
+                  <span className="text-xs font-medium text-slate-600">{regra}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Botão de Envio */}
+          <button 
+            type="submit" 
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg transition-colors text-center text-sm"
+          >
+            Finalizar e Salvar Checklist
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
