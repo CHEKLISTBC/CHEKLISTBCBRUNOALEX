@@ -8,7 +8,6 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publi
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Lista Original dos PDVs
 const LISTA_PDVS_ORIGINAL = [
   'Caipirodromo',
   'Bar Central',
@@ -40,140 +39,78 @@ const REGRAS_SUPERVISAO = [
   'Estou ciente de que o uniforme deve estar bem limpo e passado.',
 ];
 
-export default function App() {
+export default function DashboardChecklist() {
   const [abaAtiva, setAbaAtiva] = useState<'operador' | 'gestor'>('operador');
-  const [subAbaGestor, setSubAbaGestor] = useState<'relatorios' | 'usuarios' | 'novo_checklist'>('relatorios');
+  const [subAbaGestor, setSubAbaGestor] = useState<'relatorios' | 'usuarios' | 'checklists'>('relatorios');
 
-  // Listas Dinâmicas
+  // Autenticação Gestor
+  const [gestorAutenticado, setGestorAutenticado] = useState(false);
+  const [senhaInput, setSenhaInput] = useState('');
+  const [erroSenha, setErroSenha] = useState(false);
+
+  // Estados dos Dados
   const [pdvs] = useState<string[]>(LISTA_PDVS_ORIGINAL);
   const [itensChecklist, setItensChecklist] = useState<string[]>(ITENS_PADRAO);
   const [usuariosCadastrados, setUsuariosCadastrados] = useState<{ id: string; nome: string; cargo: string }[]>([]);
+  const [historico, setHistorico] = useState<any[]>([]);
 
   // Formulário Operador
-  const [pdv, setPdv] = useState(LISTA_PDVS_ORIGINAL[0]);
-  const [tipo, setTipo] = useState('Abertura');
-  const [operador, setOperador] = useState('');
+  const [pdvSelecionado, setPdvSelecionado] = useState(LISTA_PDVS_ORIGINAL[0]);
+  const [tipoChecklist, setTipoChecklist] = useState('Abertura');
+  const [operadorNome, setOperadorNome] = useState('');
   const [respostas, setRespostas] = useState<{ [key: string]: string }>({});
   const [supervisaoChecked, setSupervisaoChecked] = useState(false);
   const [regrasChecked, setRegrasChecked] = useState<{ [key: number]: boolean }>({});
-  
-  // Filtro no Gestor
-  const [filtroPdv, setFiltroPdv] = useState('TODOS');
 
-  // Gestor - Formulários
+  // Filtros e Gestão
+  const [filtroPdvRelatorio, setFiltroPdvRelatorio] = useState('TODOS');
   const [novoUsuarioNome, setNovoUsuarioNome] = useState('');
-  const [novoUsuarioCargo, setNovoUsuarioCargo] = useState('Operador');
-  const [novoItemTexto, setNovoItemTexto] = useState('');
-  
-  // Edição de Itens do Checklist
+  const [novoUsuarioCargo, setNovoUsuarioCargo] = useState('Operador de Bar');
+  const [novoItemChecklist, setNovoItemChecklist] = useState('');
   const [itemEmEdicao, setItemEmEdicao] = useState<number | null>(null);
-  const [textoEdicao, setTextoEdicao] = useState('');
+  const [textoEdicaoItem, setTextoEdicaoItem] = useState('');
 
-  // Status
-  const [enviando, setEnviando] = useState(false);
+  // UI Feedback
   const [mensagem, setMensagem] = useState<{ tipo: 'sucesso' | 'erro' | 'alerta'; texto: string } | null>(null);
+  const [enviando, setEnviando] = useState(false);
 
-  // Painel Gestor
-  const [historico, setHistorico] = useState<any[]>([]);
-  const [carregandoHistorico, setCarregandoHistorico] = useState(false);
-
-  // Carregar Dados Salvos
+  // Carregamento Inicial
   useEffect(() => {
-    const usuariosSalvos = JSON.parse(localStorage.getItem('usuarios_cadastrados') || '[]');
-    const itensSalvos = JSON.parse(localStorage.getItem('itens_checklist_custom') || '[]');
+    const usuariosSalvos = localStorage.getItem('app_usuarios');
+    const itensSalvos = localStorage.getItem('app_checklist_itens');
+    const historicoSalvo = localStorage.getItem('app_checklists_local');
 
-    if (usuariosSalvos.length > 0) setUsuariosCadastrados(usuariosSalvos);
-    if (itensSalvos.length > 0) setItensChecklist(itensSalvos);
+    if (usuariosSalvos) setUsuariosCadastrados(JSON.parse(usuariosSalvos));
+    if (itensSalvos) setItensChecklist(JSON.parse(itensSalvos));
+    if (historicoSalvo) setHistorico(JSON.parse(historicoSalvo));
   }, []);
 
-  const carregarHistorico = async () => {
-    setCarregandoHistorico(true);
-    let dadosSupabase: any[] = [];
-
-    try {
-      const { data, error } = await supabase
-        .from('checklists')
-        .select('*')
-        .order('criado_em', { ascending: false });
-
-      if (!error && data) dadosSupabase = data;
-    } catch (e) {
-      console.warn('Conexão Supabase ausente, lendo histórico local.');
-    }
-
-    const dadosLocais = JSON.parse(localStorage.getItem('checklists_local') || '[]');
-    const todos = [...dadosSupabase, ...dadosLocais];
-    const unicos = Array.from(new Map(todos.map(item => [item.criado_em || item.id, item])).values());
-    
-    setHistorico(unicos);
-    setCarregandoHistorico(false);
+  // Salvamento Automático dos Registros do Checklist
+  const salvarAutomaticoLocal = (novosDados: any[]) => {
+    setHistorico(novosDados);
+    localStorage.setItem('app_checklists_local', JSON.stringify(novosDados));
   };
 
-  useEffect(() => {
-    if (abaAtiva === 'gestor') carregarHistorico();
-  }, [abaAtiva]);
+  const handleLoginGestor = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (senhaInput === 'admin123') {
+      setGestorAutenticado(true);
+      setErroSenha(false);
+      setSenhaInput('');
+    } else {
+      setErroSenha(true);
+    }
+  };
 
-  const handleOptionChange = (item: string, valor: string) => {
+  const handleOpcaoChange = (item: string, valor: string) => {
     setRespostas((prev) => ({ ...prev, [item]: valor }));
   };
 
-  // Cadastrar Usuário
-  const handleCadastrarUsuario = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!novoUsuarioNome.trim()) return;
-
-    const novo = { id: Date.now().toString(), nome: novoUsuarioNome, cargo: novoUsuarioCargo };
-    const listaAtualizada = [novo, ...usuariosCadastrados];
-    
-    setUsuariosCadastrados(listaAtualizada);
-    localStorage.setItem('usuarios_cadastrados', JSON.stringify(listaAtualizada));
-    
-    setNovoUsuarioNome('');
-    setMensagem({ tipo: 'sucesso', texto: '🤠 Usuário cadastrado no sistema!' });
+  const handleRegraToggle = (index: number) => {
+    setRegrasChecked((prev) => ({ ...prev, [index]: !prev[index] }));
   };
 
-  // Adicionar Item/Novo Checklist
-  const handleAdicionarItemChecklist = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!novoItemTexto.trim()) return;
-
-    const listaAtualizada = [...itensChecklist, novoItemTexto];
-    setItensChecklist(listaAtualizada);
-    localStorage.setItem('itens_checklist_custom', JSON.stringify(listaAtualizada));
-
-    setNovoItemTexto('');
-    setMensagem({ tipo: 'sucesso', texto: '🌾 Novo item incorporado ao checklist!' });
-  };
-
-  // Renomear Item do Checklist
-  const iniciarEdicaoItem = (index: number, textoAtual: string) => {
-    setItemEmEdicao(index);
-    setTextoEdicao(textoAtual);
-  };
-
-  const salvarEdicaoItem = (index: number) => {
-    if (!textoEdicao.trim()) return;
-
-    const listaAtualizada = [...itensChecklist];
-    listaAtualizada[index] = textoEdicao.trim();
-    
-    setItensChecklist(listaAtualizada);
-    localStorage.setItem('itens_checklist_custom', JSON.stringify(listaAtualizada));
-
-    setItemEmEdicao(null);
-    setTextoEdicao('');
-    setMensagem({ tipo: 'sucesso', texto: '✏️ Item do checklist renomeado com sucesso!' });
-  };
-
-  const removerItemChecklist = (index: number) => {
-    const listaAtualizada = itensChecklist.filter((_, i) => i !== index);
-    setItensChecklist(listaAtualizada);
-    localStorage.setItem('itens_checklist_custom', JSON.stringify(listaAtualizada));
-    setMensagem({ tipo: 'sucesso', texto: '🗑️ Item removido do checklist!' });
-  };
-
-  // Salvar Checklist
-  const handleSalvar = async (e: React.FormEvent) => {
+  const handleSalvarChecklist = async (e: React.FormEvent) => {
     e.preventDefault();
     setMensagem(null);
 
@@ -181,13 +118,13 @@ export default function App() {
     if (pendentes.length > 0) {
       setMensagem({
         tipo: 'erro',
-        texto: `Atenção: Marque todas as opções! Faltam ${pendentes.length} item(ns).`,
+        texto: `Atenção: Responda todas as verificações! Faltam ${pendentes.length} item(ns).`,
       });
       return;
     }
 
-    if (!operador) {
-      setMensagem({ tipo: 'erro', texto: 'Selecione ou informe o nome do operador!' });
+    if (!operadorNome.trim()) {
+      setMensagem({ tipo: 'erro', texto: 'Informe ou selecione o nome do operador!' });
       return;
     }
 
@@ -195,15 +132,15 @@ export default function App() {
 
     const novoRegistro = {
       id: Date.now().toString(),
-      pdv,
-      tipo_checklist: tipo,
-      operador,
+      pdv: pdvSelecionado,
+      tipo_checklist: tipoChecklist,
+      operador: operadorNome,
       verificacao_supervisao: supervisaoChecked,
       respostas_itens: respostas,
       criado_em: new Date().toISOString(),
     };
 
-    let salvouSupabase = false;
+    let bancoSincronizado = false;
 
     try {
       const { error } = await supabase.from('checklists').insert([{
@@ -212,124 +149,172 @@ export default function App() {
         operador: novoRegistro.operador,
         verificacao_supervisao: novoRegistro.verificacao_supervisao,
         respostas_itens: novoRegistro.respostas_itens,
-        criado_em: novoRegistro.criado_em
+        criado_em: novoRegistro.criado_em,
       }]);
 
-      if (!error) salvouSupabase = true;
+      if (!error) bancoSincronizado = true;
     } catch (err) {
-      console.error('Erro Supabase:', err);
+      console.warn('Falha na conexão externa. Dados retidos no armazenamento local.');
     }
 
-    const historicoLocal = JSON.parse(localStorage.getItem('checklists_local') || '[]');
-    localStorage.setItem('checklists_local', JSON.stringify([novoRegistro, ...historicoLocal]));
+    const historicoAtualizado = [novoRegistro, ...historico];
+    salvarAutomaticoLocal(historicoAtualizado);
 
     setMensagem({
-      tipo: salvouSupabase ? 'sucesso' : 'alerta',
-      texto: salvouSupabase 
-        ? '🌾 Checklist salvo com sucesso no banco de dados!' 
-        : '⚡ Salvo localmente! (Aguardando sincronização)'
+      tipo: bancoSincronizado ? 'sucesso' : 'alerta',
+      texto: bancoSincronizado
+        ? ' Check-list finalizado e sincronizado no banco de dados!'
+        : '⚡ Registrado localmente com sucesso! (Sincronização pendente)',
     });
 
-    setOperador('');
+    // Reset de Formulário
+    setOperadorNome('');
     setRespostas({});
     setSupervisaoChecked(false);
     setRegrasChecked({});
     setEnviando(false);
   };
 
-  const historicoFiltrado = historico.filter((item) => 
-    filtroPdv === 'TODOS' ? true : item.pdv === filtroPdv
+  // Funções de Gestão do Checklist
+  const handleAdicionarItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novoItemChecklist.trim()) return;
+
+    const listaAtualizada = [...itensChecklist, novoItemChecklist.trim()];
+    setItensChecklist(listaAtualizada);
+    localStorage.setItem('app_checklist_itens', JSON.stringify(listaAtualizada));
+    setNovoItemChecklist('');
+    setMensagem({ tipo: 'sucesso', texto: 'Novo item adicionado ao checklist!' });
+  };
+
+  const handleSalvarEdicaoItem = (index: number) => {
+    if (!textoEdicaoItem.trim()) return;
+    const listaAtualizada = [...itensChecklist];
+    listaAtualizada[index] = textoEdicaoItem.trim();
+    setItensChecklist(listaAtualizada);
+    localStorage.setItem('app_checklist_itens', JSON.stringify(listaAtualizada));
+    setItemEmEdicao(null);
+    setTextoEdicaoItem('');
+    setMensagem({ tipo: 'sucesso', texto: 'Item renomeado com sucesso!' });
+  };
+
+  const handleExcluirItem = (index: number) => {
+    const listaAtualizada = itensChecklist.filter((_, i) => i !== index);
+    setItensChecklist(listaAtualizada);
+    localStorage.setItem('app_checklist_itens', JSON.stringify(listaAtualizada));
+    setMensagem({ tipo: 'sucesso', texto: 'Item removido com sucesso!' });
+  };
+
+  // Gestão de Usuários
+  const handleCadastrarUsuario = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novoUsuarioNome.trim()) return;
+
+    const novo = { id: Date.now().toString(), nome: novoUsuarioNome.trim(), cargo: novoUsuarioCargo };
+    const listaAtualizada = [novo, ...usuariosCadastrados];
+    setUsuariosCadastrados(listaAtualizada);
+    localStorage.setItem('app_usuarios', JSON.stringify(listaAtualizada));
+    setNovoUsuarioNome('');
+    setMensagem({ tipo: 'sucesso', texto: 'Usuário cadastrado com sucesso!' });
+  };
+
+  // Filtragem de Relatórios por PDV
+  const relatoriosFiltrados = historico.filter((item) =>
+    filtroPdvRelatorio === 'TODOS' ? true : item.pdv === filtroPdvRelatorio
   );
 
+  const handleImprimirRelatorio = () => {
+    window.print();
+  };
+
   return (
-    <div className="min-h-screen bg-[#1c130d] text-[#f4eae1] py-6 px-3 sm:px-6 font-sans">
-      
-      {/* Moldura Rústica Fazenda */}
-      <div className="max-w-4xl mx-auto bg-[#2b1e16] rounded-3xl shadow-2xl border-2 border-[#8c5a32] overflow-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-100 py-8 px-4 font-sans antialiased">
+      <div className="max-w-5xl mx-auto bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 overflow-hidden">
         
-        {/* Cabeçalho */}
-        <div className="bg-gradient-to-r from-[#422517] via-[#5c331e] to-[#422517] p-6 border-b-2 border-[#8c5a32] text-center">
-          <span className="text-3xl">🤠</span>
-          <h1 className="text-2xl sm:text-3xl font-black text-[#f3b351] tracking-wide uppercase mt-1">
-            Gestão & Checklist Fazenda
-          </h1>
-          <p className="text-xs text-[#d3a882] mt-1 font-semibold">
-            Controle Operacional dos Pontos de Venda
-          </p>
-        </div>
+        {/* Header do Dashboard */}
+        <header className="bg-slate-900 border-b border-slate-800 p-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-indigo-600/10 border border-indigo-500/20 rounded-xl text-indigo-400">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white tracking-wide">Dashboard Operacional PDV</h1>
+              <p className="text-xs text-slate-400">Gestão Integrada & Controle de Qualidade</p>
+            </div>
+          </div>
 
-        {/* Abas */}
-        <div className="grid grid-cols-2 p-2 bg-[#1a110a] border-b border-[#5c331e] gap-2">
-          <button
-            type="button"
-            onClick={() => setAbaAtiva('operador')}
-            className={`py-3 rounded-2xl text-xs sm:text-sm font-black uppercase tracking-wider transition-all ${
-              abaAtiva === 'operador'
-                ? 'bg-[#8c5a32] text-white shadow-lg border border-[#f3b351]'
-                : 'text-[#a88a72] hover:text-white hover:bg-[#2b1e16]'
-            }`}
-          >
-            📋 Operação PDV
-          </button>
-          <button
-            type="button"
-            onClick={() => setAbaAtiva('gestor')}
-            className={`py-3 rounded-2xl text-xs sm:text-sm font-black uppercase tracking-wider transition-all ${
-              abaAtiva === 'gestor'
-                ? 'bg-[#8c5a32] text-white shadow-lg border border-[#f3b351]'
-                : 'text-[#a88a72] hover:text-white hover:bg-[#2b1e16]'
-            }`}
-          >
-            ⚙️ Painel do Gestor
-          </button>
-        </div>
-
-        <div className="p-4 sm:p-8">
-          
-          {/* Mensagens */}
-          {mensagem && (
-            <div
-              className={`mb-6 p-4 rounded-2xl text-xs sm:text-sm font-bold border ${
-                mensagem.tipo === 'sucesso'
-                  ? 'bg-[#1b3820] border-[#388e3c] text-[#81c784]'
-                  : mensagem.tipo === 'alerta'
-                  ? 'bg-[#3e2723] border-[#f3b351] text-[#f3b351]'
-                  : 'bg-[#3b1212] border-[#e53935] text-[#ef9a9a]'
+          {/* Navegação Principal */}
+          <nav className="flex p-1 bg-slate-950 rounded-xl border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setAbaAtiva('operador')}
+              className={`px-5 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+                abaAtiva === 'operador'
+                  ? 'bg-indigo-600 text-white shadow-lg'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
-              {mensagem.texto}
+              Operação PDV
+            </button>
+            <button
+              type="button"
+              onClick={() => setAbaAtiva('gestor')}
+              className={`px-5 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+                abaAtiva === 'gestor'
+                  ? 'bg-indigo-600 text-white shadow-lg'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Painel do Gestor
+            </button>
+          </nav>
+        </header>
+
+        <main className="p-6">
+          {/* Alertas de Notificação */}
+          {mensagem && (
+            <div
+              className={`mb-6 p-4 rounded-xl text-xs font-semibold border flex justify-between items-center ${
+                mensagem.tipo === 'sucesso'
+                  ? 'bg-emerald-950/50 border-emerald-800/50 text-emerald-300'
+                  : mensagem.tipo === 'alerta'
+                  ? 'bg-amber-950/50 border-amber-800/50 text-amber-300'
+                  : 'bg-rose-950/50 border-rose-800/50 text-rose-300'
+              }`}
+            >
+              <span>{mensagem.texto}</span>
+              <button type="button" onClick={() => setMensagem(null)} className="text-sm opacity-70 hover:opacity-100">✕</button>
             </div>
           )}
 
           {/* ABA OPERADOR */}
           {abaAtiva === 'operador' && (
-            <form onSubmit={handleSalvar} className="space-y-6">
-              
-              <div className="space-y-4 bg-[#1a110a] p-5 rounded-2xl border border-[#5c331e]">
-                <h2 className="text-xs font-black uppercase text-[#f3b351] tracking-wider">
-                  📍 Dados da Operação
-                </h2>
-
-                <div>
-                  <label className="block text-xs font-bold text-[#d3a882] mb-1">Selecione o PDV</label>
-                  <select
-                    value={pdv}
-                    onChange={(e) => setPdv(e.target.value)}
-                    className="w-full bg-[#2b1e16] border border-[#8c5a32] rounded-xl p-3 text-sm text-white focus:outline-none focus:border-[#f3b351]"
-                  >
-                    {pdvs.map((p) => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <form onSubmit={handleSalvarChecklist} className="space-y-6">
+              <div className="bg-slate-950 p-5 rounded-xl border border-slate-800/80 space-y-4">
+                <h2 className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Informações da Operação</h2>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-[#d3a882] mb-1">Tipo</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Ponto de Venda (PDV)</label>
                     <select
-                      value={tipo}
-                      onChange={(e) => setTipo(e.target.value)}
-                      className="w-full bg-[#2b1e16] border border-[#8c5a32] rounded-xl p-3 text-sm text-white focus:outline-none focus:border-[#f3b351]"
+                      value={pdvSelecionado}
+                      onChange={(e) => setPdvSelecionado(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    >
+                      {pdvs.map((p) => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Turno / Tipo</label>
+                    <select
+                      value={tipoChecklist}
+                      onChange={(e) => setTipoChecklist(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     >
                       <option value="Abertura">Abertura</option>
                       <option value="Fechamento">Fechamento</option>
@@ -337,15 +322,15 @@ export default function App() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-[#d3a882] mb-1">Operador Responsável</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Operador Responsável</label>
                     {usuariosCadastrados.length > 0 ? (
                       <select
-                        value={operador}
-                        onChange={(e) => setOperador(e.target.value)}
-                        className="w-full bg-[#2b1e16] border border-[#8c5a32] rounded-xl p-3 text-sm text-white focus:outline-none focus:border-[#f3b351]"
+                        value={operadorNome}
+                        onChange={(e) => setOperadorNome(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                         required
                       >
-                        <option value="">Selecione da lista...</option>
+                        <option value="">Selecione o operador...</option>
                         {usuariosCadastrados.map((u) => (
                           <option key={u.id} value={u.nome}>{u.nome} ({u.cargo})</option>
                         ))}
@@ -353,10 +338,10 @@ export default function App() {
                     ) : (
                       <input
                         type="text"
-                        placeholder="Digite seu Nome"
-                        value={operador}
-                        onChange={(e) => setOperador(e.target.value)}
-                        className="w-full bg-[#2b1e16] border border-[#8c5a32] rounded-xl p-3 text-sm text-white focus:outline-none focus:border-[#f3b351]"
+                        placeholder="Nome do operador"
+                        value={operadorNome}
+                        onChange={(e) => setOperadorNome(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                         required
                       />
                     )}
@@ -366,62 +351,61 @@ export default function App() {
 
               {/* Itens do Checklist */}
               <div className="space-y-3">
-                <h2 className="text-sm font-black uppercase text-[#f3b351] tracking-wider">
-                  📝 Itens de Verificação
-                </h2>
-
-                {itensChecklist.map((item, index) => (
-                  <div key={index} className="p-4 bg-[#1a110a] rounded-2xl border border-[#5c331e] space-y-3">
-                    <span className="text-sm font-bold text-white block">{item}</span>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { label: 'Conforme', val: 'Conforme', style: 'bg-[#2e7d32] border-[#a5d6a7] text-white' },
-                        { label: 'Ñ Conforme', val: 'Não Conforme', style: 'bg-[#c62828] border-[#ef9a9a] text-white' },
-                        { label: 'N/A', val: 'Não se aplica', style: 'bg-[#4e342e] border-[#bcaaa4] text-white' }
-                      ].map((b) => (
-                        <button
-                          key={b.val}
-                          type="button"
-                          onClick={() => handleOptionChange(item, b.val)}
-                          className={`py-2.5 px-1 text-xs font-black rounded-xl border transition-all text-center ${
-                            respostas[item] === b.val
-                              ? `${b.style} shadow-lg scale-[1.02]`
-                              : 'bg-[#2b1e16] text-[#a88a72] border-[#5c331e] hover:bg-[#3d2a1f]'
-                          }`}
-                        >
-                          {b.label}
-                        </button>
-                      ))}
+                <h2 className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Itens de Verificação</h2>
+                
+                <div className="space-y-2">
+                  {itensChecklist.map((item, idx) => (
+                    <div key={idx} className="p-4 bg-slate-950 rounded-xl border border-slate-800/80 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                      <span className="text-xs font-medium text-slate-200">{idx + 1}. {item}</span>
+                      
+                      <div className="grid grid-cols-3 gap-2 w-full sm:w-auto">
+                        {[
+                          { label: 'Conforme', val: 'Conforme', activeClass: 'bg-emerald-600 border-emerald-500 text-white' },
+                          { label: 'Não Conforme', val: 'Não Conforme', activeClass: 'bg-rose-600 border-rose-500 text-white' },
+                          { label: 'N/A', val: 'Não se aplica', activeClass: 'bg-slate-700 border-slate-600 text-white' },
+                        ].map((btn) => (
+                          <button
+                            key={btn.val}
+                            type="button"
+                            onClick={() => handleOpcaoChange(item, btn.val)}
+                            className={`px-3 py-2 rounded-lg text-[11px] font-semibold border transition-all ${
+                              respostas[item] === btn.val
+                                ? `${btn.activeClass} shadow-md`
+                                : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                            }`}
+                          >
+                            {btn.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
 
-              {/* Supervisão */}
-              <div className="space-y-3">
-                <label className={`flex items-center gap-3 p-4 rounded-2xl border cursor-pointer transition-all ${
-                  supervisaoChecked ? 'bg-[#4e342e] border-[#f3b351] text-[#f3b351]' : 'bg-[#1a110a] border-[#5c331e] text-[#a88a72]'
-                }`}>
+              {/* Supervisão e Regras */}
+              <div className="bg-slate-950 p-5 rounded-xl border border-slate-800/80 space-y-4">
+                <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={supervisaoChecked}
                     onChange={(e) => setSupervisaoChecked(e.target.checked)}
-                    className="w-5 h-5 accent-[#f3b351] rounded"
+                    className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500"
                   />
-                  <span className="text-xs font-black uppercase">Verificação de Supervisão Realizada</span>
+                  <span className="text-xs font-bold text-slate-200">Acompanhamento e validação de supervisão realizados</span>
                 </label>
 
-                <div className="space-y-2 bg-[#1a110a] p-4 rounded-2xl border border-[#5c331e]">
+                <div className="space-y-2 border-t border-slate-800/60 pt-3">
                   {REGRAS_SUPERVISAO.map((regra, index) => (
                     <label key={index} className="flex items-start gap-3 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={!!regrasChecked[index]}
-                        onChange={(e) => setRegrasChecked((prev) => ({ ...prev, [index]: e.target.checked }))}
-                        className="w-4 h-4 mt-0.5 accent-[#8c5a32] rounded"
+                        onChange={() => handleRegraToggle(index)}
+                        className="w-4 h-4 mt-0.5 rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500"
                         required
                       />
-                      <span className="text-xs font-medium text-[#d3a882]">{regra}</span>
+                      <span className="text-xs text-slate-400">{regra}</span>
                     </label>
                   ))}
                 </div>
@@ -430,268 +414,259 @@ export default function App() {
               <button
                 type="submit"
                 disabled={enviando}
-                className="w-full bg-gradient-to-r from-[#8c5a32] to-[#a0683b] hover:from-[#a0683b] hover:to-[#b87843] text-white font-black py-4 rounded-2xl shadow-xl border border-[#f3b351] text-sm uppercase tracking-wider transition-all"
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 rounded-xl text-xs uppercase tracking-wider shadow-lg transition-all"
               >
-                {enviando ? 'Salvando...' : '🌾 Salvar Checklist'}
+                {enviando ? 'Processando...' : 'Finalizar e Salvar Checklist'}
               </button>
             </form>
           )}
 
           {/* ABA GESTOR */}
           {abaAtiva === 'gestor' && (
-            <div className="space-y-6">
-              
-              <div className="flex border-b border-[#5c331e] pb-3 gap-2 overflow-x-auto">
-                <button
-                  type="button"
-                  onClick={() => setSubAbaGestor('relatorios')}
-                  className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase whitespace-nowrap border ${
-                    subAbaGestor === 'relatorios' ? 'bg-[#8c5a32] text-white border-[#f3b351]' : 'bg-[#1a110a] text-[#a88a72] border-[#5c331e]'
-                  }`}
-                >
-                  📊 Acompanhamento PDV
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSubAbaGestor('usuarios')}
-                  className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase whitespace-nowrap border ${
-                    subAbaGestor === 'usuarios' ? 'bg-[#8c5a32] text-white border-[#f3b351]' : 'bg-[#1a110a] text-[#a88a72] border-[#5c331e]'
-                  }`}
-                >
-                  🤠 Cadastrar Usuários
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSubAbaGestor('novo_checklist')}
-                  className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase whitespace-nowrap border ${
-                    subAbaGestor === 'novo_checklist' ? 'bg-[#8c5a32] text-white border-[#f3b351]' : 'bg-[#1a110a] text-[#a88a72] border-[#5c331e]'
-                  }`}
-                >
-                  📝 Gerenciar Checklist
-                </button>
-              </div>
+            <div>
+              {!gestorAutenticado ? (
+                /* Tela de Login de Segurança */
+                <form onSubmit={handleLoginGestor} className="max-w-sm mx-auto my-12 bg-slate-950 p-6 rounded-xl border border-slate-800 text-center space-y-4">
+                  <div className="w-12 h-12 bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 rounded-full flex items-center justify-center mx-auto">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                  <h2 className="text-sm font-bold text-white uppercase tracking-wider">Acesso Restrito ao Gestor</h2>
+                  <p className="text-xs text-slate-400">Insira a senha de administrador para acessar os relatórios.</p>
 
-              {/* RELATÓRIOS */}
-              {subAbaGestor === 'relatorios' && (
-                <div className="space-y-4">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#1a110a] p-4 rounded-2xl border border-[#5c331e] gap-3">
-                    <div className="w-full sm:w-auto">
-                      <label className="block text-xs font-bold text-[#f3b351] uppercase mb-1">Filtrar por PDV</label>
-                      <select
-                        value={filtroPdv}
-                        onChange={(e) => setFiltroPdv(e.target.value)}
-                        className="w-full sm:w-64 bg-[#2b1e16] border border-[#8c5a32] rounded-xl p-2.5 text-xs text-white"
-                      >
-                        <option value="TODOS">Todos os Pontos de Venda</option>
-                        {pdvs.map((p) => (
-                          <option key={p} value={p}>{p}</option>
-                        ))}
-                      </select>
-                    </div>
+                  <input
+                    type="password"
+                    placeholder="Senha de acesso"
+                    value={senhaInput}
+                    onChange={(e) => setSenhaInput(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
 
+                  {erroSenha && <p className="text-[11px] text-rose-400 font-semibold">Senha incorreta. Tente novamente.</p>}
+
+                  <button
+                    type="submit"
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-lg text-xs uppercase tracking-wider"
+                  >
+                    Autenticar
+                  </button>
+                </form>
+              ) : (
+                /* Painel de Gestão Liberado */
+                <div className="space-y-6">
+                  {/* Navegação Sub-Abas Gestor */}
+                  <div className="flex border-b border-slate-800 pb-3 gap-2 overflow-x-auto">
                     <button
                       type="button"
-                      onClick={carregarHistorico}
-                      className="bg-[#8c5a32] hover:bg-[#a0683b] text-white text-xs px-4 py-2.5 rounded-xl font-bold border border-[#f3b351]"
+                      onClick={() => setSubAbaGestor('relatorios')}
+                      className={`px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                        subAbaGestor === 'relatorios' ? 'bg-indigo-600 text-white' : 'bg-slate-950 text-slate-400 border border-slate-800'
+                      }`}
                     >
-                      🔄 Atualizar Relatórios
+                      📊 Relatórios por PDV
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSubAbaGestor('checklists')}
+                      className={`px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                        subAbaGestor === 'checklists' ? 'bg-indigo-600 text-white' : 'bg-slate-950 text-slate-400 border border-slate-800'
+                      }`}
+                    >
+                      📝 Gerenciar Checklists
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSubAbaGestor('usuarios')}
+                      className={`px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                        subAbaGestor === 'usuarios' ? 'bg-indigo-600 text-white' : 'bg-slate-950 text-slate-400 border border-slate-800'
+                      }`}
+                    >
+                      👥 Cadastrar Usuários
                     </button>
                   </div>
 
-                  {carregandoHistorico ? (
-                    <div className="text-center py-10 text-[#d3a882] text-sm">Carregando dados...</div>
-                  ) : historicoFiltrado.length === 0 ? (
-                    <div className="text-center py-10 text-[#a88a72] text-sm">Nenhum registro encontrado para este filtro.</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {historicoFiltrado.map((reg) => (
-                        <div key={reg.id || reg.criado_em} className="p-4 bg-[#1a110a] rounded-2xl border border-[#5c331e] space-y-3">
-                          <div className="flex flex-wrap justify-between items-center border-b border-[#3d2a1f] pb-2 gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-[#f3b351] text-sm">{reg.pdv}</span>
-                              <span className="text-[10px] bg-[#8c5a32]/30 text-[#f3b351] border border-[#8c5a32] px-2 py-0.5 rounded-full font-bold">
-                                {reg.tipo_checklist}
-                              </span>
-                            </div>
-                            <span className="text-[10px] text-[#a88a72]">
-                              {new Date(reg.criado_em).toLocaleString('pt-BR')}
-                            </span>
-                          </div>
+                  {/* RELATÓRIOS E EXPORTAÇÃO */}
+                  {subAbaGestor === 'relatorios' && (
+                    <div className="space-y-4">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-950 p-4 rounded-xl border border-slate-800 gap-3">
+                        <div className="w-full sm:w-auto">
+                          <label className="block text-[11px] font-bold text-indigo-400 uppercase mb-1">Filtrar por PDV</label>
+                          <select
+                            value={filtroPdvRelatorio}
+                            onChange={(e) => setFiltroPdvRelatorio(e.target.value)}
+                            className="w-full sm:w-64 bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white"
+                          >
+                            <option value="TODOS">Todos os Pontos de Venda</option>
+                            {pdvs.map((p) => (
+                              <option key={p} value={p}>{p}</option>
+                            ))}
+                          </select>
+                        </div>
 
-                          <div className="text-xs text-white">
-                            <strong className="text-[#d3a882]">Operador:</strong> {reg.operador}
-                          </div>
+                        <div className="flex gap-2 w-full sm:w-auto">
+                          <button
+                            type="button"
+                            onClick={handleImprimirRelatorio}
+                            className="flex-1 sm:flex-none bg-slate-800 hover:bg-slate-700 text-white text-xs px-4 py-2 rounded-lg font-semibold border border-slate-700"
+                          >
+                            🖨️ Imprimir / Salvar PDF
+                          </button>
+                        </div>
+                      </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                            {Object.entries(reg.respostas_itens || {}).map(([k, v]: any) => (
-                              <div key={k} className="flex justify-between text-[11px] p-2 bg-[#2b1e16] rounded-xl border border-[#5c331e]">
-                                <span className="text-[#d3a882] truncate mr-2">{k}</span>
-                                <span className={`font-bold ${v === 'Conforme' ? 'text-[#81c784]' : v === 'Não Conforme' ? 'text-[#ef9a9a]' : 'text-[#a88a72]'}`}>
-                                  {v}
+                      {/* Lista de Checklists Salvos */}
+                      {relatoriosFiltrados.length === 0 ? (
+                        <div className="text-center py-12 text-slate-500 text-xs">Nenhum registro de checklist encontrado para o filtro selecionado.</div>
+                      ) : (
+                        <div className="space-y-3 print:space-y-6">
+                          {relatoriosFiltrados.map((reg) => (
+                            <div key={reg.id || reg.criado_em} className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3 print:border-slate-300 print:text-black">
+                              <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                                <div>
+                                  <span className="font-bold text-indigo-400 text-xs print:text-black">{reg.pdv}</span>
+                                  <span className="ml-2 text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-800 px-2 py-0.5 rounded-full font-semibold">
+                                    {reg.tipo_checklist}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] text-slate-400">
+                                  {new Date(reg.criado_em).toLocaleString('pt-BR')}
                                 </span>
                               </div>
-                            ))}
-                          </div>
+
+                              <p className="text-xs text-slate-300">
+                                <strong>Operador:</strong> {reg.operador}
+                              </p>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                {Object.entries(reg.respostas_itens || {}).map(([k, v]: any) => (
+                                  <div key={k} className="flex justify-between text-[11px] p-2 bg-slate-900 rounded-lg border border-slate-800/60">
+                                    <span className="text-slate-400 truncate mr-2">{k}</span>
+                                    <span className={`font-bold ${v === 'Conforme' ? 'text-emerald-400' : v === 'Não Conforme' ? 'text-rose-400' : 'text-slate-400'}`}>
+                                      {v}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
+                    </div>
+                  )}
+
+                  {/* GERENCIAR CHECKLISTS */}
+                  {subAbaGestor === 'checklists' && (
+                    <div className="space-y-6">
+                      <form onSubmit={handleAdicionarItem} className="space-y-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                        <h2 className="text-xs font-bold text-indigo-400 uppercase">Adicionar Novo Item ao Checklist</h2>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Descrição do novo item de verificação..."
+                            value={novoItemChecklist}
+                            onChange={(e) => setNovoItemChecklist(e.target.value)}
+                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
+                            required
+                          />
+                          <button
+                            type="submit"
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-lg text-xs uppercase"
+                          >
+                            Adicionar
+                          </button>
+                        </div>
+                      </form>
+
+                      <div className="space-y-2">
+                        <h3 className="text-xs font-bold text-slate-400 uppercase">Itens de Checklist Ativos ({itensChecklist.length})</h3>
+                        {itensChecklist.map((item, idx) => (
+                          <div key={idx} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center gap-2 text-xs">
+                            {itemEmEdicao === idx ? (
+                              <div className="flex-1 flex gap-2">
+                                <input
+                                  type="text"
+                                  value={textoEdicaoItem}
+                                  onChange={(e) => setTextoEdicaoItem(e.target.value)}
+                                  className="flex-1 bg-slate-900 border border-indigo-500 rounded-lg p-2 text-xs text-white"
+                                />
+                                <button type="button" onClick={() => handleSalvarEdicaoItem(idx)} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-bold">Salvar</button>
+                                <button type="button" onClick={() => setItemEmEdicao(null)} className="bg-slate-800 text-slate-300 px-3 py-1.5 rounded-lg">Cancelar</button>
+                              </div>
+                            ) : (
+                              <>
+                                <span className="text-slate-200"><strong className="text-indigo-400 mr-2">{idx + 1}.</strong>{item}</span>
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => { setItemEmEdicao(idx); setTextoEdicaoItem(item); }}
+                                    className="bg-slate-900 text-indigo-400 border border-slate-700 px-2.5 py-1 rounded-lg text-[11px]"
+                                  >
+                                    ✏️ Renomear
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleExcluirItem(idx)}
+                                    className="bg-rose-950/40 text-rose-400 border border-rose-800/50 px-2.5 py-1 rounded-lg text-[11px]"
+                                  >
+                                    🗑️ Apagar
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CADASTRAR USUÁRIOS */}
+                  {subAbaGestor === 'usuarios' && (
+                    <div className="space-y-6">
+                      <form onSubmit={handleCadastrarUsuario} className="space-y-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                        <h2 className="text-xs font-bold text-indigo-400 uppercase">Cadastrar Novo Usuário</h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <input
+                            type="text"
+                            placeholder="Nome completo..."
+                            value={novoUsuarioNome}
+                            onChange={(e) => setNovoUsuarioNome(e.target.value)}
+                            className="bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
+                            required
+                          />
+                          <select
+                            value={novoUsuarioCargo}
+                            onChange={(e) => setNovoUsuarioCargo(e.target.value)}
+                            className="bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
+                          >
+                            <option value="Operador de Bar">Operador de Bar</option>
+                            <option value="Supervisor">Supervisor</option>
+                            <option value="Gerente">Gerente</option>
+                          </select>
+                        </div>
+                        <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-lg text-xs uppercase">
+                          Cadastrar Usuário
+                        </button>
+                      </form>
+
+                      <div className="space-y-2">
+                        <h3 className="text-xs font-bold text-slate-400 uppercase">Usuários Ativos ({usuariosCadastrados.length})</h3>
+                        {usuariosCadastrados.map((u) => (
+                          <div key={u.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center text-xs">
+                            <span className="font-bold text-white">{u.nome}</span>
+                            <span className="bg-slate-900 text-indigo-400 border border-slate-800 px-2.5 py-1 rounded-lg text-[10px]">
+                              {u.cargo}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
               )}
-
-              {/* CADASTRO DE USUÁRIOS */}
-              {subAbaGestor === 'usuarios' && (
-                <div className="space-y-6">
-                  <form onSubmit={handleCadastrarUsuario} className="space-y-4 bg-[#1a110a] p-5 rounded-2xl border border-[#5c331e]">
-                    <h2 className="text-xs font-black uppercase text-[#f3b351]">Cadastrar Novo Usuário</h2>
-                    
-                    <div>
-                      <label className="block text-xs font-bold text-[#d3a882] mb-1">Nome Completo</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: João Silva"
-                        value={novoUsuarioNome}
-                        onChange={(e) => setNovoUsuarioNome(e.target.value)}
-                        className="w-full bg-[#2b1e16] border border-[#8c5a32] rounded-xl p-3 text-sm text-white"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-[#d3a882] mb-1">Cargo</label>
-                      <select
-                        value={novoUsuarioCargo}
-                        onChange={(e) => setNovoUsuarioCargo(e.target.value)}
-                        className="w-full bg-[#2b1e16] border border-[#8c5a32] rounded-xl p-3 text-sm text-white"
-                      >
-                        <option value="Operador">Operador de Bar</option>
-                        <option value="Supervisor">Supervisor</option>
-                        <option value="Gerente">Gerente</option>
-                      </select>
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full bg-[#2e7d32] hover:bg-[#388e3c] text-white font-bold py-3 rounded-xl text-xs uppercase border border-[#a5d6a7]"
-                    >
-                      Cadastrar Usuário
-                    </button>
-                  </form>
-
-                  <div>
-                    <h3 className="text-xs font-bold text-[#f3b351] uppercase tracking-wider mb-2">
-                      Usuários Cadastrados ({usuariosCadastrados.length})
-                    </h3>
-                    <div className="space-y-2">
-                      {usuariosCadastrados.map((u) => (
-                        <div key={u.id} className="p-3 bg-[#1a110a] rounded-xl border border-[#5c331e] flex justify-between items-center text-xs">
-                          <span className="font-bold text-white">{u.nome}</span>
-                          <span className="bg-[#2b1e16] text-[#d3a882] px-2.5 py-1 rounded-lg border border-[#8c5a32]">
-                            {u.cargo}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* RENOMEAR E GERENCIAR CHECKLIST */}
-              {subAbaGestor === 'novo_checklist' && (
-                <div className="space-y-6">
-                  
-                  {/* Form para adicionar novo item */}
-                  <form onSubmit={handleAdicionarItemChecklist} className="space-y-4 bg-[#1a110a] p-5 rounded-2xl border border-[#5c331e]">
-                    <h2 className="text-xs font-black uppercase text-[#f3b351]">Adicionar Novo Item de Verificação</h2>
-                    
-                    <div>
-                      <label className="block text-xs font-bold text-[#d3a882] mb-1">Descrição do Item</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: Verificar temperatura do balcão refrigerado"
-                        value={novoItemTexto}
-                        onChange={(e) => setNovoItemTexto(e.target.value)}
-                        className="w-full bg-[#2b1e16] border border-[#8c5a32] rounded-xl p-3 text-sm text-white"
-                        required
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full bg-[#8c5a32] hover:bg-[#a0683b] text-white font-bold py-3 rounded-xl text-xs uppercase border border-[#f3b351]"
-                    >
-                      ➕ Adicionar Item
-                    </button>
-                  </form>
-
-                  {/* Lista de itens com opção de Renomear / Excluir */}
-                  <div>
-                    <h3 className="text-xs font-bold text-[#f3b351] uppercase tracking-wider mb-2">
-                      Itens Ativos no Checklist ({itensChecklist.length})
-                    </h3>
-                    <div className="space-y-2">
-                      {itensChecklist.map((item, idx) => (
-                        <div key={idx} className="p-3 bg-[#1a110a] rounded-xl border border-[#5c331e] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
-                          
-                          {itemEmEdicao === idx ? (
-                            <div className="flex-1 flex gap-2 w-full">
-                              <input
-                                type="text"
-                                value={textoEdicao}
-                                onChange={(e) => setTextoEdicao(e.target.value)}
-                                className="flex-1 bg-[#2b1e16] border border-[#f3b351] rounded-lg p-2 text-xs text-white"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => salvarEdicaoItem(idx)}
-                                className="bg-[#2e7d32] text-white px-3 py-2 rounded-lg font-bold"
-                              >
-                                Salvar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setItemEmEdicao(null)}
-                                className="bg-[#4e342e] text-white px-3 py-2 rounded-lg"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          ) : (
-                            <>
-                              <span className="text-white flex-1 font-medium">
-                                <strong className="text-[#f3b351] mr-2">{idx + 1}.</strong> {item}
-                              </span>
-                              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                                <button
-                                  type="button"
-                                  onClick={() => iniciarEdicaoItem(idx, item)}
-                                  className="bg-[#2b1e16] hover:bg-[#3d2a1f] text-[#f3b351] px-3 py-1.5 rounded-lg border border-[#8c5a32] font-bold text-[11px]"
-                                >
-                                  ✏️ Renomear
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => removerItemChecklist(idx)}
-                                  className="bg-[#3b1212] hover:bg-[#4d1919] text-[#ef9a9a] px-3 py-1.5 rounded-lg border border-[#c62828] font-bold text-[11px]"
-                                >
-                                  🗑️ Excluir
-                                </button>
-                              </div>
-                            </>
-                          )}
-
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                </div>
-              )}
-
             </div>
           )}
-
-        </div>
+        </main>
       </div>
     </div>
   );
