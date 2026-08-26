@@ -8,31 +8,36 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publi
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const LISTA_PDVS_FAZENDA = [
-  '🤠 Bar do Rancho',
-  '🌾 Caipiródromo',
-  '🐴 Bar da Arena',
-  '🍺 Saloon Principal',
-  '🔥 Bar da Queima do Alho',
-  '🚜 Quiosque do Curral',
-  '🥩 Restaurante Fazenda',
-  '👑 Camarote VIP Country',
-  '📦 Almoxarifado / Estoque Central',
+// Lista Original dos PDVs
+const LISTA_PDVS_ORIGINAL = [
+  'Caipirodromo',
+  'Bar Central',
+  'Restaurante Principal',
+  'Quiosque Praia',
+  'Bar do Camarote',
+  'Bar da Piscina',
+  'Bar do Palco Principal',
+  'Bar Vip / Área VIP',
+  'Praça de Alimentação',
+  'Estoque Central / Apoio',
 ];
 
-const ITENS_PADRAO_FAZENDA = [
-  'Limpeza e organização do balcão rústico',
-  'Geladeiras e freezers refrigeração OK',
-  'Mise en place e utensílios abastecidos',
-  'Estoque de bebidas e gelo suficiente',
-  'Caixa e terminal de vendas aptos',
-  'Área de atendimento limpa e sem resíduos',
-  'Verificação de porções e petiscos da roça',
+const ITENS_PADRAO = [
+  'Layout organizado e limpo',
+  'Balcões limpos',
+  'Verificar freezers e geladeiras ligados',
+  'Geladeiras abastecidas e organizadas',
+  'Todos os utensílios da mise en place disponíveis',
+  'Bancadas organizadas',
+  'Computador apto para vendas',
+  'PDV limpo e organizado',
+  'Freezer de sorvete limpo e organizado',
+  'Verificar se todas as porções estão disponíveis',
 ];
 
-const REGRAS_FAZENDA = [
-  'PROIBIDO uso de celular durante a operação no recinto.',
-  'Uniforme completo, limpo e com alinhamento padrão da Fazenda.',
+const REGRAS_SUPERVISAO = [
+  'PROIBIDO uso de celular no local de trabalho e qualquer tipo de aparelho sonoro.',
+  'Estou ciente de que o uniforme deve estar bem limpo e passado.',
 ];
 
 export default function App() {
@@ -40,25 +45,29 @@ export default function App() {
   const [subAbaGestor, setSubAbaGestor] = useState<'relatorios' | 'usuarios' | 'novo_checklist'>('relatorios');
 
   // Listas Dinâmicas
-  const [pdvs] = useState<string[]>(LISTA_PDVS_FAZENDA);
-  const [itensChecklist, setItensChecklist] = useState<string[]>(ITENS_PADRAO_FAZENDA);
+  const [pdvs] = useState<string[]>(LISTA_PDVS_ORIGINAL);
+  const [itensChecklist, setItensChecklist] = useState<string[]>(ITENS_PADRAO);
   const [usuariosCadastrados, setUsuariosCadastrados] = useState<{ id: string; nome: string; cargo: string }[]>([]);
 
   // Formulário Operador
-  const [pdv, setPdv] = useState(LISTA_PDVS_FAZENDA[0]);
+  const [pdv, setPdv] = useState(LISTA_PDVS_ORIGINAL[0]);
   const [tipo, setTipo] = useState('Abertura');
   const [operador, setOperador] = useState('');
   const [respostas, setRespostas] = useState<{ [key: string]: string }>({});
   const [supervisaoChecked, setSupervisaoChecked] = useState(false);
   const [regrasChecked, setRegrasChecked] = useState<{ [key: number]: boolean }>({});
   
-  // Filtro de Relatório no Gestor
+  // Filtro no Gestor
   const [filtroPdv, setFiltroPdv] = useState('TODOS');
 
   // Gestor - Formulários
   const [novoUsuarioNome, setNovoUsuarioNome] = useState('');
-  const [novoUsuarioCargo, setNovoUsuarioCargo] = useState('Operador de Bar');
+  const [novoUsuarioCargo, setNovoUsuarioCargo] = useState('Operador');
   const [novoItemTexto, setNovoItemTexto] = useState('');
+  
+  // Edição de Itens do Checklist
+  const [itemEmEdicao, setItemEmEdicao] = useState<number | null>(null);
+  const [textoEdicao, setTextoEdicao] = useState('');
 
   // Status
   const [enviando, setEnviando] = useState(false);
@@ -68,10 +77,10 @@ export default function App() {
   const [historico, setHistorico] = useState<any[]>([]);
   const [carregandoHistorico, setCarregandoHistorico] = useState(false);
 
-  // Carregar Dados Salvos do Navegador
+  // Carregar Dados Salvos
   useEffect(() => {
-    const usuariosSalvos = JSON.parse(localStorage.getItem('fazenda_usuarios') || '[]');
-    const itensSalvos = JSON.parse(localStorage.getItem('fazenda_itens_checklist') || '[]');
+    const usuariosSalvos = JSON.parse(localStorage.getItem('usuarios_cadastrados') || '[]');
+    const itensSalvos = JSON.parse(localStorage.getItem('itens_checklist_custom') || '[]');
 
     if (usuariosSalvos.length > 0) setUsuariosCadastrados(usuariosSalvos);
     if (itensSalvos.length > 0) setItensChecklist(itensSalvos);
@@ -92,7 +101,7 @@ export default function App() {
       console.warn('Conexão Supabase ausente, lendo histórico local.');
     }
 
-    const dadosLocais = JSON.parse(localStorage.getItem('fazenda_checklists_local') || '[]');
+    const dadosLocais = JSON.parse(localStorage.getItem('checklists_local') || '[]');
     const todos = [...dadosSupabase, ...dadosLocais];
     const unicos = Array.from(new Map(todos.map(item => [item.criado_em || item.id, item])).values());
     
@@ -117,10 +126,10 @@ export default function App() {
     const listaAtualizada = [novo, ...usuariosCadastrados];
     
     setUsuariosCadastrados(listaAtualizada);
-    localStorage.setItem('fazenda_usuarios', JSON.stringify(listaAtualizada));
+    localStorage.setItem('usuarios_cadastrados', JSON.stringify(listaAtualizada));
     
     setNovoUsuarioNome('');
-    setMensagem({ tipo: 'sucesso', texto: '🤠 Peão / Colaborador cadastrado no sistema!' });
+    setMensagem({ tipo: 'sucesso', texto: '🤠 Usuário cadastrado no sistema!' });
   };
 
   // Adicionar Item/Novo Checklist
@@ -130,10 +139,37 @@ export default function App() {
 
     const listaAtualizada = [...itensChecklist, novoItemTexto];
     setItensChecklist(listaAtualizada);
-    localStorage.setItem('fazenda_itens_checklist', JSON.stringify(listaAtualizada));
+    localStorage.setItem('itens_checklist_custom', JSON.stringify(listaAtualizada));
 
     setNovoItemTexto('');
-    setMensagem({ tipo: 'sucesso', texto: '🌾 Novo item incorporado à rotina da fazenda!' });
+    setMensagem({ tipo: 'sucesso', texto: '🌾 Novo item incorporado ao checklist!' });
+  };
+
+  // Renomear Item do Checklist
+  const iniciarEdicaoItem = (index: number, textoAtual: string) => {
+    setItemEmEdicao(index);
+    setTextoEdicao(textoAtual);
+  };
+
+  const salvarEdicaoItem = (index: number) => {
+    if (!textoEdicao.trim()) return;
+
+    const listaAtualizada = [...itensChecklist];
+    listaAtualizada[index] = textoEdicao.trim();
+    
+    setItensChecklist(listaAtualizada);
+    localStorage.setItem('itens_checklist_custom', JSON.stringify(listaAtualizada));
+
+    setItemEmEdicao(null);
+    setTextoEdicao('');
+    setMensagem({ tipo: 'sucesso', texto: '✏️ Item do checklist renomeado com sucesso!' });
+  };
+
+  const removerItemChecklist = (index: number) => {
+    const listaAtualizada = itensChecklist.filter((_, i) => i !== index);
+    setItensChecklist(listaAtualizada);
+    localStorage.setItem('itens_checklist_custom', JSON.stringify(listaAtualizada));
+    setMensagem({ tipo: 'sucesso', texto: '🗑️ Item removido do checklist!' });
   };
 
   // Salvar Checklist
@@ -145,7 +181,7 @@ export default function App() {
     if (pendentes.length > 0) {
       setMensagem({
         tipo: 'erro',
-        texto: `Atenção: Responda todos os itens da roça! Faltam ${pendentes.length} item(ns).`,
+        texto: `Atenção: Marque todas as opções! Faltam ${pendentes.length} item(ns).`,
       });
       return;
     }
@@ -184,14 +220,14 @@ export default function App() {
       console.error('Erro Supabase:', err);
     }
 
-    const historicoLocal = JSON.parse(localStorage.getItem('fazenda_checklists_local') || '[]');
-    localStorage.setItem('fazenda_checklists_local', JSON.stringify([novoRegistro, ...historicoLocal]));
+    const historicoLocal = JSON.parse(localStorage.getItem('checklists_local') || '[]');
+    localStorage.setItem('checklists_local', JSON.stringify([novoRegistro, ...historicoLocal]));
 
     setMensagem({
       tipo: salvouSupabase ? 'sucesso' : 'alerta',
       texto: salvouSupabase 
-        ? '🌾 Checklist gravado no banco de dados com sucesso!' 
-        : '⚡ Salvo localmente na fazenda! (Aguardando sincronização)'
+        ? '🌾 Checklist salvo com sucesso no banco de dados!' 
+        : '⚡ Salvo localmente! (Aguardando sincronização)'
     });
 
     setOperador('');
@@ -208,21 +244,21 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#1c130d] text-[#f4eae1] py-6 px-3 sm:px-6 font-sans">
       
-      {/* Moldura Principal com Estilo Rústico Fazenda */}
+      {/* Moldura Rústica Fazenda */}
       <div className="max-w-4xl mx-auto bg-[#2b1e16] rounded-3xl shadow-2xl border-2 border-[#8c5a32] overflow-hidden">
         
-        {/* Cabeçalho Country */}
+        {/* Cabeçalho */}
         <div className="bg-gradient-to-r from-[#422517] via-[#5c331e] to-[#422517] p-6 border-b-2 border-[#8c5a32] text-center">
           <span className="text-3xl">🤠</span>
           <h1 className="text-2xl sm:text-3xl font-black text-[#f3b351] tracking-wide uppercase mt-1">
             Gestão & Checklist Fazenda
           </h1>
           <p className="text-xs text-[#d3a882] mt-1 font-semibold">
-            Controle Operacional dos Bares e Pontos de Venda
+            Controle Operacional dos Pontos de Venda
           </p>
         </div>
 
-        {/* Abas Superiores */}
+        {/* Abas */}
         <div className="grid grid-cols-2 p-2 bg-[#1a110a] border-b border-[#5c331e] gap-2">
           <button
             type="button"
@@ -250,7 +286,7 @@ export default function App() {
 
         <div className="p-4 sm:p-8">
           
-          {/* MENSAGENS DE NOTIFICAÇÃO */}
+          {/* Mensagens */}
           {mensagem && (
             <div
               className={`mb-6 p-4 rounded-2xl text-xs sm:text-sm font-bold border ${
@@ -265,18 +301,17 @@ export default function App() {
             </div>
           )}
 
-          {/* ================= ABA OPERADOR ================= */}
+          {/* ABA OPERADOR */}
           {abaAtiva === 'operador' && (
             <form onSubmit={handleSalvar} className="space-y-6">
               
-              {/* Seleção do Ponto e Operador */}
               <div className="space-y-4 bg-[#1a110a] p-5 rounded-2xl border border-[#5c331e]">
                 <h2 className="text-xs font-black uppercase text-[#f3b351] tracking-wider">
                   📍 Dados da Operação
                 </h2>
 
                 <div>
-                  <label className="block text-xs font-bold text-[#d3a882] mb-1">Selecione o Bar / PDV</label>
+                  <label className="block text-xs font-bold text-[#d3a882] mb-1">Selecione o PDV</label>
                   <select
                     value={pdv}
                     onChange={(e) => setPdv(e.target.value)}
@@ -290,14 +325,14 @@ export default function App() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-[#d3a882] mb-1">Turno / Tipo</label>
+                    <label className="block text-xs font-bold text-[#d3a882] mb-1">Tipo</label>
                     <select
                       value={tipo}
                       onChange={(e) => setTipo(e.target.value)}
                       className="w-full bg-[#2b1e16] border border-[#8c5a32] rounded-xl p-3 text-sm text-white focus:outline-none focus:border-[#f3b351]"
                     >
-                      <option value="Abertura">🌾 Abertura</option>
-                      <option value="Fechamento">🌙 Fechamento</option>
+                      <option value="Abertura">Abertura</option>
+                      <option value="Fechamento">Fechamento</option>
                     </select>
                   </div>
 
@@ -318,7 +353,7 @@ export default function App() {
                     ) : (
                       <input
                         type="text"
-                        placeholder="Nome do Operador"
+                        placeholder="Digite seu Nome"
                         value={operador}
                         onChange={(e) => setOperador(e.target.value)}
                         className="w-full bg-[#2b1e16] border border-[#8c5a32] rounded-xl p-3 text-sm text-white focus:outline-none focus:border-[#f3b351]"
@@ -373,11 +408,11 @@ export default function App() {
                     onChange={(e) => setSupervisaoChecked(e.target.checked)}
                     className="w-5 h-5 accent-[#f3b351] rounded"
                   />
-                  <span className="text-xs font-black uppercase">Acompanhamento da Supervisão Confirmado</span>
+                  <span className="text-xs font-black uppercase">Verificação de Supervisão Realizada</span>
                 </label>
 
                 <div className="space-y-2 bg-[#1a110a] p-4 rounded-2xl border border-[#5c331e]">
-                  {REGRAS_FAZENDA.map((regra, index) => (
+                  {REGRAS_SUPERVISAO.map((regra, index) => (
                     <label key={index} className="flex items-start gap-3 cursor-pointer">
                       <input
                         type="checkbox"
@@ -397,16 +432,15 @@ export default function App() {
                 disabled={enviando}
                 className="w-full bg-gradient-to-r from-[#8c5a32] to-[#a0683b] hover:from-[#a0683b] hover:to-[#b87843] text-white font-black py-4 rounded-2xl shadow-xl border border-[#f3b351] text-sm uppercase tracking-wider transition-all"
               >
-                {enviando ? 'Salvando...' : '🌾 Salvar Checklist da Fazenda'}
+                {enviando ? 'Salvando...' : '🌾 Salvar Checklist'}
               </button>
             </form>
           )}
 
-          {/* ================= ABA GESTOR ================= */}
+          {/* ABA GESTOR */}
           {abaAtiva === 'gestor' && (
             <div className="space-y-6">
               
-              {/* Navegação Secundária do Gestor */}
               <div className="flex border-b border-[#5c331e] pb-3 gap-2 overflow-x-auto">
                 <button
                   type="button"
@@ -424,7 +458,7 @@ export default function App() {
                     subAbaGestor === 'usuarios' ? 'bg-[#8c5a32] text-white border-[#f3b351]' : 'bg-[#1a110a] text-[#a88a72] border-[#5c331e]'
                   }`}
                 >
-                  🤠 Cadastrar Peão/Usuário
+                  🤠 Cadastrar Usuários
                 </button>
                 <button
                   type="button"
@@ -433,18 +467,16 @@ export default function App() {
                     subAbaGestor === 'novo_checklist' ? 'bg-[#8c5a32] text-white border-[#f3b351]' : 'bg-[#1a110a] text-[#a88a72] border-[#5c331e]'
                   }`}
                 >
-                  📝 Novo Checklist
+                  📝 Gerenciar Checklist
                 </button>
               </div>
 
-              {/* GESTOR: RELATÓRIOS E ACOMPANHAMENTO */}
+              {/* RELATÓRIOS */}
               {subAbaGestor === 'relatorios' && (
                 <div className="space-y-4">
-                  
-                  {/* Filtro por PDV */}
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#1a110a] p-4 rounded-2xl border border-[#5c331e] gap-3">
                     <div className="w-full sm:w-auto">
-                      <label className="block text-xs font-bold text-[#f3b351] uppercase mb-1">Filtrar por Bar/PDV</label>
+                      <label className="block text-xs font-bold text-[#f3b351] uppercase mb-1">Filtrar por PDV</label>
                       <select
                         value={filtroPdv}
                         onChange={(e) => setFiltroPdv(e.target.value)}
@@ -467,7 +499,7 @@ export default function App() {
                   </div>
 
                   {carregandoHistorico ? (
-                    <div className="text-center py-10 text-[#d3a882] text-sm">Carregando dados da fazenda...</div>
+                    <div className="text-center py-10 text-[#d3a882] text-sm">Carregando dados...</div>
                   ) : historicoFiltrado.length === 0 ? (
                     <div className="text-center py-10 text-[#a88a72] text-sm">Nenhum registro encontrado para este filtro.</div>
                   ) : (
@@ -507,17 +539,17 @@ export default function App() {
                 </div>
               )}
 
-              {/* GESTOR: CADASTRO DE USUÁRIOS */}
+              {/* CADASTRO DE USUÁRIOS */}
               {subAbaGestor === 'usuarios' && (
                 <div className="space-y-6">
                   <form onSubmit={handleCadastrarUsuario} className="space-y-4 bg-[#1a110a] p-5 rounded-2xl border border-[#5c331e]">
-                    <h2 className="text-xs font-black uppercase text-[#f3b351]">Cadastrar Novo Peão / Operador</h2>
+                    <h2 className="text-xs font-black uppercase text-[#f3b351]">Cadastrar Novo Usuário</h2>
                     
                     <div>
                       <label className="block text-xs font-bold text-[#d3a882] mb-1">Nome Completo</label>
                       <input
                         type="text"
-                        placeholder="Ex: Zé da Silva"
+                        placeholder="Ex: João Silva"
                         value={novoUsuarioNome}
                         onChange={(e) => setNovoUsuarioNome(e.target.value)}
                         className="w-full bg-[#2b1e16] border border-[#8c5a32] rounded-xl p-3 text-sm text-white"
@@ -532,9 +564,9 @@ export default function App() {
                         onChange={(e) => setNovoUsuarioCargo(e.target.value)}
                         className="w-full bg-[#2b1e16] border border-[#8c5a32] rounded-xl p-3 text-sm text-white"
                       >
-                        <option value="Operador de Bar">Operador de Bar</option>
-                        <option value="Supervisor de Campo">Supervisor de Campo</option>
-                        <option value="Gerente Geral">Gerente Geral</option>
+                        <option value="Operador">Operador de Bar</option>
+                        <option value="Supervisor">Supervisor</option>
+                        <option value="Gerente">Gerente</option>
                       </select>
                     </div>
 
@@ -542,14 +574,13 @@ export default function App() {
                       type="submit"
                       className="w-full bg-[#2e7d32] hover:bg-[#388e3c] text-white font-bold py-3 rounded-xl text-xs uppercase border border-[#a5d6a7]"
                     >
-                      Cadastrar Operador
+                      Cadastrar Usuário
                     </button>
                   </form>
 
-                  {/* Lista de Usuários */}
                   <div>
                     <h3 className="text-xs font-bold text-[#f3b351] uppercase tracking-wider mb-2">
-                      Operadores Cadastrados ({usuariosCadastrados.length})
+                      Usuários Cadastrados ({usuariosCadastrados.length})
                     </h3>
                     <div className="space-y-2">
                       {usuariosCadastrados.map((u) => (
@@ -565,17 +596,19 @@ export default function App() {
                 </div>
               )}
 
-              {/* GESTOR: CRIAR NOVO CHECKLIST */}
+              {/* RENOMEAR E GERENCIAR CHECKLIST */}
               {subAbaGestor === 'novo_checklist' && (
                 <div className="space-y-6">
+                  
+                  {/* Form para adicionar novo item */}
                   <form onSubmit={handleAdicionarItemChecklist} className="space-y-4 bg-[#1a110a] p-5 rounded-2xl border border-[#5c331e]">
-                    <h2 className="text-xs font-black uppercase text-[#f3b351]">Adicionar Item ao Checklist</h2>
+                    <h2 className="text-xs font-black uppercase text-[#f3b351]">Adicionar Novo Item de Verificação</h2>
                     
                     <div>
                       <label className="block text-xs font-bold text-[#d3a882] mb-1">Descrição do Item</label>
                       <input
                         type="text"
-                        placeholder="Ex: Verificar estoque de fardo de gelo"
+                        placeholder="Ex: Verificar temperatura do balcão refrigerado"
                         value={novoItemTexto}
                         onChange={(e) => setNovoItemTexto(e.target.value)}
                         className="w-full bg-[#2b1e16] border border-[#8c5a32] rounded-xl p-3 text-sm text-white"
@@ -587,23 +620,71 @@ export default function App() {
                       type="submit"
                       className="w-full bg-[#8c5a32] hover:bg-[#a0683b] text-white font-bold py-3 rounded-xl text-xs uppercase border border-[#f3b351]"
                     >
-                      Adicionar ao Checklist
+                      ➕ Adicionar Item
                     </button>
                   </form>
 
-                  {/* Itens Atuais */}
+                  {/* Lista de itens com opção de Renomear / Excluir */}
                   <div>
                     <h3 className="text-xs font-bold text-[#f3b351] uppercase tracking-wider mb-2">
                       Itens Ativos no Checklist ({itensChecklist.length})
                     </h3>
                     <div className="space-y-2">
                       {itensChecklist.map((item, idx) => (
-                        <div key={idx} className="p-3 bg-[#1a110a] rounded-xl border border-[#5c331e] text-xs text-white">
-                          {idx + 1}. {item}
+                        <div key={idx} className="p-3 bg-[#1a110a] rounded-xl border border-[#5c331e] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
+                          
+                          {itemEmEdicao === idx ? (
+                            <div className="flex-1 flex gap-2 w-full">
+                              <input
+                                type="text"
+                                value={textoEdicao}
+                                onChange={(e) => setTextoEdicao(e.target.value)}
+                                className="flex-1 bg-[#2b1e16] border border-[#f3b351] rounded-lg p-2 text-xs text-white"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => salvarEdicaoItem(idx)}
+                                className="bg-[#2e7d32] text-white px-3 py-2 rounded-lg font-bold"
+                              >
+                                Salvar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setItemEmEdicao(null)}
+                                className="bg-[#4e342e] text-white px-3 py-2 rounded-lg"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="text-white flex-1 font-medium">
+                                <strong className="text-[#f3b351] mr-2">{idx + 1}.</strong> {item}
+                              </span>
+                              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => iniciarEdicaoItem(idx, item)}
+                                  className="bg-[#2b1e16] hover:bg-[#3d2a1f] text-[#f3b351] px-3 py-1.5 rounded-lg border border-[#8c5a32] font-bold text-[11px]"
+                                >
+                                  ✏️ Renomear
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removerItemChecklist(idx)}
+                                  className="bg-[#3b1212] hover:bg-[#4d1919] text-[#ef9a9a] px-3 py-1.5 rounded-lg border border-[#c62828] font-bold text-[11px]"
+                                >
+                                  🗑️ Excluir
+                                </button>
+                              </div>
+                            </>
+                          )}
+
                         </div>
                       ))}
                     </div>
                   </div>
+
                 </div>
               )}
 
