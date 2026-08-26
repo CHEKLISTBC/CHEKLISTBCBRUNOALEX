@@ -39,7 +39,7 @@ const REGRAS_SUPERVISAO = [
   'Estou ciente de que o uniforme deve estar bem limpo e passado.',
 ];
 
-export default function DashboardChecklist() {
+export default function DashboardChecklistCountry() {
   const [abaAtiva, setAbaAtiva] = useState<'operador' | 'gestor'>('operador');
   const [subAbaGestor, setSubAbaGestor] = useState<'relatorios' | 'usuarios' | 'checklists'>('relatorios');
 
@@ -70,7 +70,7 @@ export default function DashboardChecklist() {
   const [itemEmEdicao, setItemEmEdicao] = useState<number | null>(null);
   const [textoEdicaoItem, setTextoEdicaoItem] = useState('');
 
-  // UI Feedback
+  // Feedback Visual
   const [mensagem, setMensagem] = useState<{ tipo: 'sucesso' | 'erro' | 'alerta'; texto: string } | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -85,7 +85,7 @@ export default function DashboardChecklist() {
     if (historicoSalvo) setHistorico(JSON.parse(historicoSalvo));
   }, []);
 
-  // Salvamento Automático dos Registros do Checklist
+  // Salvamento Automático Local
   const salvarAutomaticoLocal = (novosDados: any[]) => {
     setHistorico(novosDados);
     localStorage.setItem('app_checklists_local', JSON.stringify(novosDados));
@@ -102,8 +102,16 @@ export default function DashboardChecklist() {
     }
   };
 
-  const handleOpcaoChange = (item: string, valor: string) => {
-    setRespostas((prev) => ({ ...prev, [item]: valor }));
+  // Seleção exclusiva por Checkbox (Se já estiver selecionado, desmarca)
+  const handleCheckboxOption = (item: string, valor: string) => {
+    setRespostas((prev) => {
+      if (prev[item] === valor) {
+        const cop = { ...prev };
+        delete cop[item];
+        return cop;
+      }
+      return { ...prev, [item]: valor };
+    });
   };
 
   const handleRegraToggle = (index: number) => {
@@ -118,13 +126,13 @@ export default function DashboardChecklist() {
     if (pendentes.length > 0) {
       setMensagem({
         tipo: 'erro',
-        texto: `Atenção: Responda todas as verificações! Faltam ${pendentes.length} item(ns).`,
+        texto: `🤠 Atenção, peão! Faltam ${pendentes.length} item(ns) para verificar.`,
       });
       return;
     }
 
     if (!operadorNome.trim()) {
-      setMensagem({ tipo: 'erro', texto: 'Informe ou selecione o nome do operador!' });
+      setMensagem({ tipo: 'erro', texto: 'Informe ou selecione o operador responsável!' });
       return;
     }
 
@@ -154,7 +162,7 @@ export default function DashboardChecklist() {
 
       if (!error) bancoSincronizado = true;
     } catch (err) {
-      console.warn('Falha na conexão externa. Dados retidos no armazenamento local.');
+      console.warn('Conexão remota indisponível. Armazenado localmente.');
     }
 
     const historicoAtualizado = [novoRegistro, ...historico];
@@ -163,11 +171,10 @@ export default function DashboardChecklist() {
     setMensagem({
       tipo: bancoSincronizado ? 'sucesso' : 'alerta',
       texto: bancoSincronizado
-        ? ' Check-list finalizado e sincronizado no banco de dados!'
-        : '⚡ Registrado localmente com sucesso! (Sincronização pendente)',
+        ? '🌾 Checklist salvo e sincronizado na estância!'
+        : '⚡ Salvo localmente na fazenda! (Aguardando rede)',
     });
 
-    // Reset de Formulário
     setOperadorNome('');
     setRespostas({});
     setSupervisaoChecked(false);
@@ -175,7 +182,6 @@ export default function DashboardChecklist() {
     setEnviando(false);
   };
 
-  // Funções de Gestão do Checklist
   const handleAdicionarItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoItemChecklist.trim()) return;
@@ -184,7 +190,7 @@ export default function DashboardChecklist() {
     setItensChecklist(listaAtualizada);
     localStorage.setItem('app_checklist_itens', JSON.stringify(listaAtualizada));
     setNovoItemChecklist('');
-    setMensagem({ tipo: 'sucesso', texto: 'Novo item adicionado ao checklist!' });
+    setMensagem({ tipo: 'sucesso', texto: 'Novo item incorporado ao checklist!' });
   };
 
   const handleSalvarEdicaoItem = (index: number) => {
@@ -202,10 +208,9 @@ export default function DashboardChecklist() {
     const listaAtualizada = itensChecklist.filter((_, i) => i !== index);
     setItensChecklist(listaAtualizada);
     localStorage.setItem('app_checklist_itens', JSON.stringify(listaAtualizada));
-    setMensagem({ tipo: 'sucesso', texto: 'Item removido com sucesso!' });
+    setMensagem({ tipo: 'sucesso', texto: 'Item removido do checklist!' });
   };
 
-  // Gestão de Usuários
   const handleCadastrarUsuario = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoUsuarioNome.trim()) return;
@@ -215,93 +220,89 @@ export default function DashboardChecklist() {
     setUsuariosCadastrados(listaAtualizada);
     localStorage.setItem('app_usuarios', JSON.stringify(listaAtualizada));
     setNovoUsuarioNome('');
-    setMensagem({ tipo: 'sucesso', texto: 'Usuário cadastrado com sucesso!' });
+    setMensagem({ tipo: 'sucesso', texto: 'Usuário registrado na tropa!' });
   };
 
-  // Filtragem de Relatórios por PDV
   const relatoriosFiltrados = historico.filter((item) =>
     filtroPdvRelatorio === 'TODOS' ? true : item.pdv === filtroPdvRelatorio
   );
 
-  const handleImprimirRelatorio = () => {
-    window.print();
-  };
-
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 py-8 px-4 font-sans antialiased">
-      <div className="max-w-5xl mx-auto bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 overflow-hidden">
+    <div className="min-h-screen bg-[#18100a] text-[#f4eae1] py-6 px-3 sm:px-6 font-sans antialiased">
+      <div className="max-w-5xl mx-auto bg-[#26180f] rounded-3xl shadow-2xl border-2 border-[#6e4323] overflow-hidden">
         
-        {/* Header do Dashboard */}
-        <header className="bg-slate-900 border-b border-slate-800 p-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+        {/* Cabeçalho Estilo Country Premium */}
+        <header className="bg-gradient-to-r from-[#3b2011] via-[#522e17] to-[#3b2011] p-6 border-b-2 border-[#6e4323] flex flex-col sm:flex-row justify-between items-center gap-4 text-center sm:text-left">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-indigo-600/10 border border-indigo-500/20 rounded-xl text-indigo-400">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
+            <div className="text-4xl p-2 bg-[#18100a]/50 rounded-2xl border border-[#b8860b]">🤠</div>
             <div>
-              <h1 className="text-xl font-bold text-white tracking-wide">Dashboard Operacional PDV</h1>
-              <p className="text-xs text-slate-400">Gestão Integrada & Controle de Qualidade</p>
+              <h1 className="text-2xl font-black text-[#d4af37] tracking-wider uppercase font-serif">
+                Gestão & Checklist Fazenda
+              </h1>
+              <p className="text-xs text-[#c29b7f] font-medium">Controle Operacional dos Pontos de Venda</p>
             </div>
           </div>
 
-          {/* Navegação Principal */}
-          <nav className="flex p-1 bg-slate-950 rounded-xl border border-slate-800">
+          <nav className="flex p-1.5 bg-[#18100a] rounded-2xl border border-[#6e4323] gap-1">
             <button
               type="button"
               onClick={() => setAbaAtiva('operador')}
-              className={`px-5 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
                 abaAtiva === 'operador'
-                  ? 'bg-indigo-600 text-white shadow-lg'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-[#8b4513] text-white shadow-md border border-[#d4af37]'
+                  : 'text-[#a0826c] hover:text-white'
               }`}
             >
-              Operação PDV
+              📋 Operação
             </button>
             <button
               type="button"
               onClick={() => setAbaAtiva('gestor')}
-              className={`px-5 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
                 abaAtiva === 'gestor'
-                  ? 'bg-indigo-600 text-white shadow-lg'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-[#8b4513] text-white shadow-md border border-[#d4af37]'
+                  : 'text-[#a0826c] hover:text-white'
               }`}
             >
-              Painel do Gestor
+              ⚙️ Gestor
             </button>
           </nav>
         </header>
 
-        <main className="p-6">
-          {/* Alertas de Notificação */}
+        <main className="p-4 sm:p-8">
+          {/* Mensagens de Notificação */}
           {mensagem && (
             <div
-              className={`mb-6 p-4 rounded-xl text-xs font-semibold border flex justify-between items-center ${
+              className={`mb-6 p-4 rounded-2xl text-xs font-bold border flex justify-between items-center shadow-lg ${
                 mensagem.tipo === 'sucesso'
-                  ? 'bg-emerald-950/50 border-emerald-800/50 text-emerald-300'
+                  ? 'bg-[#1b3820] border-[#388e3c] text-[#a5d6a7]'
                   : mensagem.tipo === 'alerta'
-                  ? 'bg-amber-950/50 border-amber-800/50 text-amber-300'
-                  : 'bg-rose-950/50 border-rose-800/50 text-rose-300'
+                  ? 'bg-[#3e2723] border-[#d4af37] text-[#ffd54f]'
+                  : 'bg-[#3b1212] border-[#e53935] text-[#ef9a9a]'
               }`}
             >
               <span>{mensagem.texto}</span>
-              <button type="button" onClick={() => setMensagem(null)} className="text-sm opacity-70 hover:opacity-100">✕</button>
+              <button type="button" onClick={() => setMensagem(null)} className="text-sm font-bold opacity-80 hover:opacity-100">✕</button>
             </div>
           )}
 
           {/* ABA OPERADOR */}
           {abaAtiva === 'operador' && (
             <form onSubmit={handleSalvarChecklist} className="space-y-6">
-              <div className="bg-slate-950 p-5 rounded-xl border border-slate-800/80 space-y-4">
-                <h2 className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Informações da Operação</h2>
-                
+              
+              {/* Dados Principais */}
+              <div className="bg-[#18100a] p-5 rounded-2xl border border-[#522e17] space-y-4 shadow-inner">
+                <h2 className="text-xs font-black uppercase tracking-wider text-[#d4af37]">
+                  📍 Dados da Operação
+                </h2>
+
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Ponto de Venda (PDV)</label>
+                    <label className="block text-xs font-bold text-[#c29b7f] mb-1">Selecione o PDV</label>
                     <select
                       value={pdvSelecionado}
                       onChange={(e) => setPdvSelecionado(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className="w-full bg-[#26180f] border border-[#6e4323] rounded-xl p-3 text-xs text-white focus:outline-none focus:border-[#d4af37]"
                     >
                       {pdvs.map((p) => (
                         <option key={p} value={p}>{p}</option>
@@ -310,11 +311,11 @@ export default function DashboardChecklist() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Turno / Tipo</label>
+                    <label className="block text-xs font-bold text-[#c29b7f] mb-1">Turno</label>
                     <select
                       value={tipoChecklist}
                       onChange={(e) => setTipoChecklist(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className="w-full bg-[#26180f] border border-[#6e4323] rounded-xl p-3 text-xs text-white focus:outline-none focus:border-[#d4af37]"
                     >
                       <option value="Abertura">Abertura</option>
                       <option value="Fechamento">Fechamento</option>
@@ -322,15 +323,15 @@ export default function DashboardChecklist() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Operador Responsável</label>
+                    <label className="block text-xs font-bold text-[#c29b7f] mb-1">Operador Responsável</label>
                     {usuariosCadastrados.length > 0 ? (
                       <select
                         value={operadorNome}
                         onChange={(e) => setOperadorNome(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        className="w-full bg-[#26180f] border border-[#6e4323] rounded-xl p-3 text-xs text-white focus:outline-none focus:border-[#d4af37]"
                         required
                       >
-                        <option value="">Selecione o operador...</option>
+                        <option value="">Selecione o peão/operador...</option>
                         {usuariosCadastrados.map((u) => (
                           <option key={u.id} value={u.nome}>{u.nome} ({u.cargo})</option>
                         ))}
@@ -341,7 +342,7 @@ export default function DashboardChecklist() {
                         placeholder="Nome do operador"
                         value={operadorNome}
                         onChange={(e) => setOperadorNome(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        className="w-full bg-[#26180f] border border-[#6e4323] rounded-xl p-3 text-xs text-white focus:outline-none focus:border-[#d4af37]"
                         required
                       />
                     )}
@@ -349,34 +350,44 @@ export default function DashboardChecklist() {
                 </div>
               </div>
 
-              {/* Itens do Checklist */}
+              {/* Itens do Checklist com Caixas Checkbox */}
               <div className="space-y-3">
-                <h2 className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Itens de Verificação</h2>
-                
-                <div className="space-y-2">
+                <h2 className="text-xs font-black uppercase tracking-wider text-[#d4af37]">
+                  📝 Itens de Verificação
+                </h2>
+
+                <div className="space-y-2.5">
                   {itensChecklist.map((item, idx) => (
-                    <div key={idx} className="p-4 bg-slate-950 rounded-xl border border-slate-800/80 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                      <span className="text-xs font-medium text-slate-200">{idx + 1}. {item}</span>
-                      
-                      <div className="grid grid-cols-3 gap-2 w-full sm:w-auto">
+                    <div key={idx} className="p-4 bg-[#18100a] rounded-2xl border border-[#522e17] flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                      <span className="text-xs font-bold text-white leading-relaxed">{idx + 1}. {item}</span>
+
+                      {/* Opções Estilo Checkbox */}
+                      <div className="grid grid-cols-3 gap-2 w-full md:w-auto">
                         {[
-                          { label: 'Conforme', val: 'Conforme', activeClass: 'bg-emerald-600 border-emerald-500 text-white' },
-                          { label: 'Não Conforme', val: 'Não Conforme', activeClass: 'bg-rose-600 border-rose-500 text-white' },
-                          { label: 'N/A', val: 'Não se aplica', activeClass: 'bg-slate-700 border-slate-600 text-white' },
-                        ].map((btn) => (
-                          <button
-                            key={btn.val}
-                            type="button"
-                            onClick={() => handleOpcaoChange(item, btn.val)}
-                            className={`px-3 py-2 rounded-lg text-[11px] font-semibold border transition-all ${
-                              respostas[item] === btn.val
-                                ? `${btn.activeClass} shadow-md`
-                                : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
-                            }`}
-                          >
-                            {btn.label}
-                          </button>
-                        ))}
+                          { label: 'Conforme', val: 'Conforme', style: 'border-[#2e7d32] text-[#81c784] bg-[#1b3820]/40' },
+                          { label: 'Ñ Conforme', val: 'Não Conforme', style: 'border-[#c62828] text-[#ef9a9a] bg-[#3b1212]/40' },
+                          { label: 'N/A', val: 'Não se aplica', style: 'border-[#6e4323] text-[#c29b7f] bg-[#26180f]' },
+                        ].map((box) => {
+                          const estaMarcado = respostas[item] === box.val;
+                          return (
+                            <label
+                              key={box.val}
+                              className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border cursor-pointer select-none transition-all ${
+                                estaMarcado
+                                  ? `${box.style} border-2 shadow-lg ring-1 ring-[#d4af37]`
+                                  : 'bg-[#26180f] border-[#522e17] text-[#a0826c] hover:border-[#6e4323]'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={estaMarcado}
+                                onChange={() => handleCheckboxOption(item, box.val)}
+                                className="w-4 h-4 rounded accent-[#8b4513] cursor-pointer"
+                              />
+                              <span className="text-[11px] font-black uppercase">{box.label}</span>
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}
@@ -384,28 +395,30 @@ export default function DashboardChecklist() {
               </div>
 
               {/* Supervisão e Regras */}
-              <div className="bg-slate-950 p-5 rounded-xl border border-slate-800/80 space-y-4">
-                <label className="flex items-center gap-3 cursor-pointer">
+              <div className="bg-[#18100a] p-5 rounded-2xl border border-[#522e17] space-y-4">
+                <label className="flex items-center gap-3 cursor-pointer p-3 bg-[#26180f] rounded-xl border border-[#6e4323]">
                   <input
                     type="checkbox"
                     checked={supervisaoChecked}
                     onChange={(e) => setSupervisaoChecked(e.target.checked)}
-                    className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500"
+                    className="w-5 h-5 rounded accent-[#8b4513] cursor-pointer"
                   />
-                  <span className="text-xs font-bold text-slate-200">Acompanhamento e validação de supervisão realizados</span>
+                  <span className="text-xs font-black uppercase text-[#d4af37]">
+                    Verificação de Supervisão Realizada
+                  </span>
                 </label>
 
-                <div className="space-y-2 border-t border-slate-800/60 pt-3">
+                <div className="space-y-2 pt-2">
                   {REGRAS_SUPERVISAO.map((regra, index) => (
                     <label key={index} className="flex items-start gap-3 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={!!regrasChecked[index]}
                         onChange={() => handleRegraToggle(index)}
-                        className="w-4 h-4 mt-0.5 rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-indigo-500"
+                        className="w-4 h-4 mt-0.5 rounded accent-[#8b4513] cursor-pointer"
                         required
                       />
-                      <span className="text-xs text-slate-400">{regra}</span>
+                      <span className="text-xs font-medium text-[#c29b7f]">{regra}</span>
                     </label>
                   ))}
                 </div>
@@ -414,9 +427,9 @@ export default function DashboardChecklist() {
               <button
                 type="submit"
                 disabled={enviando}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 rounded-xl text-xs uppercase tracking-wider shadow-lg transition-all"
+                className="w-full bg-gradient-to-r from-[#8b4513] via-[#a0522d] to-[#8b4513] hover:from-[#a0522d] hover:to-[#8b4513] text-white font-black py-4 rounded-2xl shadow-xl border-2 border-[#d4af37] text-xs uppercase tracking-wider transition-all"
               >
-                {enviando ? 'Processando...' : 'Finalizar e Salvar Checklist'}
+                {enviando ? 'Salvando...' : '🌾 Salvar Checklist da Fazenda'}
               </button>
             </form>
           )}
@@ -425,52 +438,47 @@ export default function DashboardChecklist() {
           {abaAtiva === 'gestor' && (
             <div>
               {!gestorAutenticado ? (
-                /* Tela de Login de Segurança */
-                <form onSubmit={handleLoginGestor} className="max-w-sm mx-auto my-12 bg-slate-950 p-6 rounded-xl border border-slate-800 text-center space-y-4">
-                  <div className="w-12 h-12 bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 rounded-full flex items-center justify-center mx-auto">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                  </div>
-                  <h2 className="text-sm font-bold text-white uppercase tracking-wider">Acesso Restrito ao Gestor</h2>
-                  <p className="text-xs text-slate-400">Insira a senha de administrador para acessar os relatórios.</p>
+                /* Login de Segurança */
+                <form onSubmit={handleLoginGestor} className="max-w-sm mx-auto my-10 bg-[#18100a] p-6 rounded-2xl border border-[#6e4323] text-center space-y-4 shadow-xl">
+                  <div className="text-4xl">🔐</div>
+                  <h2 className="text-sm font-black text-[#d4af37] uppercase tracking-wider">Painel do Gestor</h2>
+                  <p className="text-xs text-[#c29b7f]">Digite a senha de administrador para acessar os relatórios.</p>
 
                   <input
                     type="password"
                     placeholder="Senha de acesso"
                     value={senhaInput}
                     onChange={(e) => setSenhaInput(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full bg-[#26180f] border border-[#6e4323] rounded-xl p-3 text-xs text-white text-center focus:outline-none focus:border-[#d4af37]"
                   />
 
-                  {erroSenha && <p className="text-[11px] text-rose-400 font-semibold">Senha incorreta. Tente novamente.</p>}
+                  {erroSenha && <p className="text-[11px] text-[#ef9a9a] font-bold">Senha incorreta. Tente admin123</p>}
 
                   <button
                     type="submit"
-                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-lg text-xs uppercase tracking-wider"
+                    className="w-full bg-[#8b4513] hover:bg-[#a0522d] text-white font-black py-3 rounded-xl text-xs uppercase tracking-wider border border-[#d4af37]"
                   >
-                    Autenticar
+                    Entrar no Painel
                   </button>
                 </form>
               ) : (
-                /* Painel de Gestão Liberado */
+                /* Sub-abas do Gestor */
                 <div className="space-y-6">
-                  {/* Navegação Sub-Abas Gestor */}
-                  <div className="flex border-b border-slate-800 pb-3 gap-2 overflow-x-auto">
+                  <div className="flex border-b border-[#522e17] pb-3 gap-2 overflow-x-auto">
                     <button
                       type="button"
                       onClick={() => setSubAbaGestor('relatorios')}
-                      className={`px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                        subAbaGestor === 'relatorios' ? 'bg-indigo-600 text-white' : 'bg-slate-950 text-slate-400 border border-slate-800'
+                      className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase whitespace-nowrap transition-all ${
+                        subAbaGestor === 'relatorios' ? 'bg-[#8b4513] text-white border border-[#d4af37]' : 'bg-[#18100a] text-[#a0826c] border border-[#522e17]'
                       }`}
                     >
-                      📊 Relatórios por PDV
+                      📊 Acompanhamento PDV
                     </button>
                     <button
                       type="button"
                       onClick={() => setSubAbaGestor('checklists')}
-                      className={`px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                        subAbaGestor === 'checklists' ? 'bg-indigo-600 text-white' : 'bg-slate-950 text-slate-400 border border-slate-800'
+                      className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase whitespace-nowrap transition-all ${
+                        subAbaGestor === 'checklists' ? 'bg-[#8b4513] text-white border border-[#d4af37]' : 'bg-[#18100a] text-[#a0826c] border border-[#522e17]'
                       }`}
                     >
                       📝 Gerenciar Checklists
@@ -478,24 +486,24 @@ export default function DashboardChecklist() {
                     <button
                       type="button"
                       onClick={() => setSubAbaGestor('usuarios')}
-                      className={`px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                        subAbaGestor === 'usuarios' ? 'bg-indigo-600 text-white' : 'bg-slate-950 text-slate-400 border border-slate-800'
+                      className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase whitespace-nowrap transition-all ${
+                        subAbaGestor === 'usuarios' ? 'bg-[#8b4513] text-white border border-[#d4af37]' : 'bg-[#18100a] text-[#a0826c] border border-[#522e17]'
                       }`}
                     >
-                      👥 Cadastrar Usuários
+                      🤠 Cadastrar Usuários
                     </button>
                   </div>
 
-                  {/* RELATÓRIOS E EXPORTAÇÃO */}
+                  {/* RELATÓRIOS E IMPRESSÃO / PDF */}
                   {subAbaGestor === 'relatorios' && (
                     <div className="space-y-4">
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-950 p-4 rounded-xl border border-slate-800 gap-3">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#18100a] p-4 rounded-2xl border border-[#522e17] gap-3">
                         <div className="w-full sm:w-auto">
-                          <label className="block text-[11px] font-bold text-indigo-400 uppercase mb-1">Filtrar por PDV</label>
+                          <label className="block text-[11px] font-black text-[#d4af37] uppercase mb-1">Filtrar por PDV</label>
                           <select
                             value={filtroPdvRelatorio}
                             onChange={(e) => setFiltroPdvRelatorio(e.target.value)}
-                            className="w-full sm:w-64 bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white"
+                            className="w-full sm:w-64 bg-[#26180f] border border-[#6e4323] rounded-xl p-2.5 text-xs text-white"
                           >
                             <option value="TODOS">Todos os Pontos de Venda</option>
                             {pdvs.map((p) => (
@@ -504,45 +512,43 @@ export default function DashboardChecklist() {
                           </select>
                         </div>
 
-                        <div className="flex gap-2 w-full sm:w-auto">
-                          <button
-                            type="button"
-                            onClick={handleImprimirRelatorio}
-                            className="flex-1 sm:flex-none bg-slate-800 hover:bg-slate-700 text-white text-xs px-4 py-2 rounded-lg font-semibold border border-slate-700"
-                          >
-                            🖨️ Imprimir / Salvar PDF
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => window.print()}
+                          className="bg-[#8b4513] hover:bg-[#a0522d] text-white text-xs px-4 py-2.5 rounded-xl font-black border border-[#d4af37]"
+                        >
+                          🖨️ Imprimir / Baixar PDF
+                        </button>
                       </div>
 
-                      {/* Lista de Checklists Salvos */}
+                      {/* Lista de Registros */}
                       {relatoriosFiltrados.length === 0 ? (
-                        <div className="text-center py-12 text-slate-500 text-xs">Nenhum registro de checklist encontrado para o filtro selecionado.</div>
+                        <div className="text-center py-10 text-[#a0826c] text-xs">Nenhum registro encontrado para este filtro.</div>
                       ) : (
-                        <div className="space-y-3 print:space-y-6">
+                        <div className="space-y-3">
                           {relatoriosFiltrados.map((reg) => (
-                            <div key={reg.id || reg.criado_em} className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3 print:border-slate-300 print:text-black">
-                              <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                                <div>
-                                  <span className="font-bold text-indigo-400 text-xs print:text-black">{reg.pdv}</span>
-                                  <span className="ml-2 text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-800 px-2 py-0.5 rounded-full font-semibold">
+                            <div key={reg.id || reg.criado_em} className="p-4 bg-[#18100a] rounded-2xl border border-[#522e17] space-y-3">
+                              <div className="flex justify-between items-center border-b border-[#3b2011] pb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-[#d4af37] text-xs">{reg.pdv}</span>
+                                  <span className="text-[10px] bg-[#8b4513]/30 text-[#d4af37] border border-[#6e4323] px-2 py-0.5 rounded-full font-bold">
                                     {reg.tipo_checklist}
                                   </span>
                                 </div>
-                                <span className="text-[10px] text-slate-400">
+                                <span className="text-[10px] text-[#a0826c]">
                                   {new Date(reg.criado_em).toLocaleString('pt-BR')}
                                 </span>
                               </div>
 
-                              <p className="text-xs text-slate-300">
-                                <strong>Operador:</strong> {reg.operador}
+                              <p className="text-xs text-white">
+                                <strong className="text-[#c29b7f]">Operador:</strong> {reg.operador}
                               </p>
 
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                                 {Object.entries(reg.respostas_itens || {}).map(([k, v]: any) => (
-                                  <div key={k} className="flex justify-between text-[11px] p-2 bg-slate-900 rounded-lg border border-slate-800/60">
-                                    <span className="text-slate-400 truncate mr-2">{k}</span>
-                                    <span className={`font-bold ${v === 'Conforme' ? 'text-emerald-400' : v === 'Não Conforme' ? 'text-rose-400' : 'text-slate-400'}`}>
+                                  <div key={k} className="flex justify-between text-[11px] p-2 bg-[#26180f] rounded-xl border border-[#522e17]">
+                                    <span className="text-[#c29b7f] truncate mr-2">{k}</span>
+                                    <span className={`font-bold ${v === 'Conforme' ? 'text-[#81c784]' : v === 'Não Conforme' ? 'text-[#ef9a9a]' : 'text-[#a0826c]'}`}>
                                       {v}
                                     </span>
                                   </div>
@@ -555,59 +561,61 @@ export default function DashboardChecklist() {
                     </div>
                   )}
 
-                  {/* GERENCIAR CHECKLISTS */}
+                  {/* GERENCIAR CHECKLISTS (EDITAR / APAGAR / NOVO) */}
                   {subAbaGestor === 'checklists' && (
                     <div className="space-y-6">
-                      <form onSubmit={handleAdicionarItem} className="space-y-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
-                        <h2 className="text-xs font-bold text-indigo-400 uppercase">Adicionar Novo Item ao Checklist</h2>
+                      <form onSubmit={handleAdicionarItem} className="space-y-3 bg-[#18100a] p-4 rounded-2xl border border-[#522e17]">
+                        <h2 className="text-xs font-black text-[#d4af37] uppercase">Cadastrar Novo Item no Checklist</h2>
                         <div className="flex gap-2">
                           <input
                             type="text"
-                            placeholder="Descrição do novo item de verificação..."
+                            placeholder="Ex: Verificar selagem dos recipientes"
                             value={novoItemChecklist}
                             onChange={(e) => setNovoItemChecklist(e.target.value)}
-                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
+                            className="flex-1 bg-[#26180f] border border-[#6e4323] rounded-xl p-2.5 text-xs text-white"
                             required
                           />
                           <button
                             type="submit"
-                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-lg text-xs uppercase"
+                            className="bg-[#8b4513] hover:bg-[#a0522d] text-white font-black px-4 py-2.5 rounded-xl text-xs uppercase border border-[#d4af37]"
                           >
-                            Adicionar
+                            ➕ Adicionar
                           </button>
                         </div>
                       </form>
 
                       <div className="space-y-2">
-                        <h3 className="text-xs font-bold text-slate-400 uppercase">Itens de Checklist Ativos ({itensChecklist.length})</h3>
+                        <h3 className="text-xs font-black text-[#d4af37] uppercase tracking-wider">
+                          Itens de Checklist Ativos ({itensChecklist.length})
+                        </h3>
                         {itensChecklist.map((item, idx) => (
-                          <div key={idx} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center gap-2 text-xs">
+                          <div key={idx} className="p-3 bg-[#18100a] rounded-xl border border-[#522e17] flex justify-between items-center gap-2 text-xs">
                             {itemEmEdicao === idx ? (
                               <div className="flex-1 flex gap-2">
                                 <input
                                   type="text"
                                   value={textoEdicaoItem}
                                   onChange={(e) => setTextoEdicaoItem(e.target.value)}
-                                  className="flex-1 bg-slate-900 border border-indigo-500 rounded-lg p-2 text-xs text-white"
+                                  className="flex-1 bg-[#26180f] border border-[#d4af37] rounded-lg p-2 text-xs text-white"
                                 />
-                                <button type="button" onClick={() => handleSalvarEdicaoItem(idx)} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-bold">Salvar</button>
-                                <button type="button" onClick={() => setItemEmEdicao(null)} className="bg-slate-800 text-slate-300 px-3 py-1.5 rounded-lg">Cancelar</button>
+                                <button type="button" onClick={() => handleSalvarEdicaoItem(idx)} className="bg-[#2e7d32] text-white px-3 py-1.5 rounded-lg font-bold">Salvar</button>
+                                <button type="button" onClick={() => setItemEmEdicao(null)} className="bg-[#3e2723] text-white px-3 py-1.5 rounded-lg">Cancelar</button>
                               </div>
                             ) : (
                               <>
-                                <span className="text-slate-200"><strong className="text-indigo-400 mr-2">{idx + 1}.</strong>{item}</span>
+                                <span className="text-white font-medium"><strong className="text-[#d4af37] mr-2">{idx + 1}.</strong>{item}</span>
                                 <div className="flex gap-2">
                                   <button
                                     type="button"
                                     onClick={() => { setItemEmEdicao(idx); setTextoEdicaoItem(item); }}
-                                    className="bg-slate-900 text-indigo-400 border border-slate-700 px-2.5 py-1 rounded-lg text-[11px]"
+                                    className="bg-[#26180f] text-[#d4af37] border border-[#6e4323] px-2.5 py-1 rounded-lg text-[11px] font-bold"
                                   >
                                     ✏️ Renomear
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleExcluirItem(idx)}
-                                    className="bg-rose-950/40 text-rose-400 border border-rose-800/50 px-2.5 py-1 rounded-lg text-[11px]"
+                                    className="bg-[#3b1212] text-[#ef9a9a] border border-[#c62828] px-2.5 py-1 rounded-lg text-[11px] font-bold"
                                   >
                                     🗑️ Apagar
                                   </button>
@@ -620,41 +628,41 @@ export default function DashboardChecklist() {
                     </div>
                   )}
 
-                  {/* CADASTRAR USUÁRIOS */}
+                  {/* CADASTRO DE USUÁRIOS */}
                   {subAbaGestor === 'usuarios' && (
                     <div className="space-y-6">
-                      <form onSubmit={handleCadastrarUsuario} className="space-y-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
-                        <h2 className="text-xs font-bold text-indigo-400 uppercase">Cadastrar Novo Usuário</h2>
+                      <form onSubmit={handleCadastrarUsuario} className="space-y-4 bg-[#18100a] p-4 rounded-2xl border border-[#522e17]">
+                        <h2 className="text-xs font-black text-[#d4af37] uppercase">Cadastrar Novo Usuário</h2>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <input
                             type="text"
                             placeholder="Nome completo..."
                             value={novoUsuarioNome}
                             onChange={(e) => setNovoUsuarioNome(e.target.value)}
-                            className="bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
+                            className="bg-[#26180f] border border-[#6e4323] rounded-xl p-2.5 text-xs text-white"
                             required
                           />
                           <select
                             value={novoUsuarioCargo}
                             onChange={(e) => setNovoUsuarioCargo(e.target.value)}
-                            className="bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-white"
+                            className="bg-[#26180f] border border-[#6e4323] rounded-xl p-2.5 text-xs text-white"
                           >
                             <option value="Operador de Bar">Operador de Bar</option>
                             <option value="Supervisor">Supervisor</option>
                             <option value="Gerente">Gerente</option>
                           </select>
                         </div>
-                        <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-lg text-xs uppercase">
+                        <button type="submit" className="w-full bg-[#2e7d32] hover:bg-[#388e3c] text-white font-black py-2.5 rounded-xl text-xs uppercase border border-[#a5d6a7]">
                           Cadastrar Usuário
                         </button>
                       </form>
 
                       <div className="space-y-2">
-                        <h3 className="text-xs font-bold text-slate-400 uppercase">Usuários Ativos ({usuariosCadastrados.length})</h3>
+                        <h3 className="text-xs font-black text-[#d4af37] uppercase">Usuários Cadastrados ({usuariosCadastrados.length})</h3>
                         {usuariosCadastrados.map((u) => (
-                          <div key={u.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center text-xs">
+                          <div key={u.id} className="p-3 bg-[#18100a] rounded-xl border border-[#522e17] flex justify-between items-center text-xs">
                             <span className="font-bold text-white">{u.nome}</span>
-                            <span className="bg-slate-900 text-indigo-400 border border-slate-800 px-2.5 py-1 rounded-lg text-[10px]">
+                            <span className="bg-[#26180f] text-[#c29b7f] border border-[#6e4323] px-2.5 py-1 rounded-lg text-[10px]">
                               {u.cargo}
                             </span>
                           </div>
@@ -662,6 +670,7 @@ export default function DashboardChecklist() {
                       </div>
                     </div>
                   )}
+
                 </div>
               )}
             </div>
