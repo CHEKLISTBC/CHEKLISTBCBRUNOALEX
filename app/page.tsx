@@ -68,35 +68,19 @@ const initialTarefas: Tarefa[] = [
 ];
 
 export default function Page() {
-  // 1. ESTADOS COM CARREGAMENTO DO LOCALSTORAGE
-  const [usuarios, setUsuarios] = useState<User[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('app_usuarios');
-      return saved ? JSON.parse(saved) : initialUsers;
-    }
-    return initialUsers;
-  });
+  // Controle para carregar dados do navegador apenas após a montagem do componente
+  const [carregado, setCarregado] = useState(false);
 
-  const [pdvs, setPdvs] = useState<PDV[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('app_pdvs');
-      return saved ? JSON.parse(saved) : initialPDVs;
-    }
-    return initialPDVs;
-  });
+  // Estados dos Dados
+  const [usuarios, setUsuarios] = useState<User[]>([]);
+  const [pdvs, setPdvs] = useState<PDV[]>([]);
+  const [tarefas, setTarefas] = useState<Tarefa[]>([]);
+  const [respostas, setRespostas] = useState<RespostaState>({});
 
-  const [tarefas, setTarefas] = useState<Tarefa[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('app_tarefas');
-      return saved ? JSON.parse(saved) : initialTarefas;
-    }
-    return initialTarefas;
-  });
-
+  // Estados de Navegação e Seleção
   const [pdvSelecionado, setPdvSelecionado] = useState<number>(1);
   const [visao, setVisao] = useState<'colaborador' | 'gestor' | 'cadastros' | 'dashboard'>('colaborador');
   const [abaAtivaIndex, setAbaAtivaIndex] = useState<number>(0);
-  const [respostas, setRespostas] = useState<RespostaState>({});
 
   // Modais de Cadastro / Edição
   const [modalNC, setModalNC] = useState<{ aberto: boolean; tarefaId: number | null }>({ aberto: false, tarefaId: null });
@@ -107,18 +91,45 @@ export default function Page() {
   const [novoPDV, setNovoPDV] = useState({ nome: '', codigo: '' });
   const [novaTarefa, setNovaTarefa] = useState({ categoria: '', descricao: '', abaId: 101, obrigatoria: true });
 
-  // 2. PERSISTÊNCIA AUTOMÁTICA EM LOCALSTORAGE
+  // 1. CARREGAR DADOS DO LOCALSTORAGE APÓS O MONTAGEM NO NAVEGADOR
   useEffect(() => {
-    localStorage.setItem('app_usuarios', JSON.stringify(usuarios));
-  }, [usuarios]);
+    const savedUsuarios = localStorage.getItem('app_usuarios');
+    const savedPdvs = localStorage.getItem('app_pdvs');
+    const savedTarefas = localStorage.getItem('app_tarefas');
+    const savedRespostas = localStorage.getItem('app_respostas');
+
+    setUsuarios(savedUsuarios ? JSON.parse(savedUsuarios) : initialUsers);
+    setPdvs(savedPdvs ? JSON.parse(savedPdvs) : initialPDVs);
+    setTarefas(savedTarefas ? JSON.parse(savedTarefas) : initialTarefas);
+    if (savedRespostas) setRespostas(JSON.parse(savedRespostas));
+
+    setCarregado(true);
+  }, []);
+
+  // 2. SALVAR AUTOMATICAMENTE SEMPRE QUE HOUVER MUDANÇA
+  useEffect(() => {
+    if (carregado) {
+      localStorage.setItem('app_usuarios', JSON.stringify(usuarios));
+    }
+  }, [usuarios, carregado]);
 
   useEffect(() => {
-    localStorage.setItem('app_pdvs', JSON.stringify(pdvs));
-  }, [pdvs]);
+    if (carregado) {
+      localStorage.setItem('app_pdvs', JSON.stringify(pdvs));
+    }
+  }, [pdvs, carregado]);
 
   useEffect(() => {
-    localStorage.setItem('app_tarefas', JSON.stringify(tarefas));
-  }, [tarefas]);
+    if (carregado) {
+      localStorage.setItem('app_tarefas', JSON.stringify(tarefas));
+    }
+  }, [tarefas, carregado]);
+
+  useEffect(() => {
+    if (carregado) {
+      localStorage.setItem('app_respostas', JSON.stringify(respostas));
+    }
+  }, [respostas, carregado]);
 
   // Handlers do Checklist
   const handleCheckboxChange = (tarefaId: number, statusConforme: boolean) => {
@@ -147,39 +158,49 @@ export default function Page() {
     setDetalhesNC({ descricao: '', prioridade: 'MEDIA' });
   };
 
-  // Handlers de Criação e Exclusão
+  // Handlers de Criação e Exclusão com Salvo Imediato
   const handleAddUsuario = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoUsuario.nome || !novoUsuario.email) return;
-    setUsuarios([...usuarios, { ...novoUsuario, id: Date.now() }]);
+    setUsuarios((prev) => [...prev, { ...novoUsuario, id: Date.now() }]);
     setNovoUsuario({ nome: '', email: '', perfil: 'colaborador' });
   };
 
   const handleExcluirUsuario = (id: number) => {
-    if (confirm('Deseja excluir este usuário?')) setUsuarios(usuarios.filter((u) => u.id !== id));
+    if (confirm('Deseja excluir este usuário?')) {
+      setUsuarios((prev) => prev.filter((u) => u.id !== id));
+    }
   };
 
   const handleAddPDV = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoPDV.nome || !novoPDV.codigo) return;
-    setPdvs([...pdvs, { ...novoPDV, id: Date.now() }]);
+    setPdvs((prev) => [...prev, { ...novoPDV, id: Date.now() }]);
     setNovoPDV({ nome: '', codigo: '' });
   };
 
   const handleExcluirPDV = (id: number) => {
-    if (confirm('Deseja excluir este PDV?')) setPdvs(pdvs.filter((p) => p.id !== id));
+    if (confirm('Deseja excluir este PDV?')) {
+      setPdvs((prev) => prev.filter((p) => p.id !== id));
+    }
   };
 
   const handleAddTarefa = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novaTarefa.descricao || !novaTarefa.categoria) return;
-    setTarefas([...tarefas, { ...novaTarefa, id: Date.now(), abaId: Number(novaTarefa.abaId) }]);
+    setTarefas((prev) => [...prev, { ...novaTarefa, id: Date.now(), abaId: Number(novaTarefa.abaId) }]);
     setNovaTarefa({ categoria: '', descricao: '', abaId: 101, obrigatoria: true });
   };
 
   const handleExcluirTarefa = (id: number) => {
-    if (confirm('Deseja excluir esta tarefa?')) setTarefas(tarefas.filter((t) => t.id !== id));
+    if (confirm('Deseja excluir esta tarefa?')) {
+      setTarefas((prev) => prev.filter((t) => t.id !== id));
+    }
   };
+
+  if (!carregado) {
+    return <div style={{ padding: '2rem', textAlign: 'center', fontFamily: 'sans-serif' }}>Carregando dados...</div>;
+  }
 
   const abaAtual = initialAbas[abaAtivaIndex] || initialAbas[0];
   const tarefasDaAba = tarefas.filter((t) => t.abaId === abaAtual.id);
@@ -194,7 +215,7 @@ export default function Page() {
             Sistema Integrado de Checklist e Operações
           </h1>
           <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>
-            PDV Ativo: <strong>{pdvAtualObjeto?.nome || 'Nenhum'}</strong> ({pdvAtualObjeto?.codigo})
+            PDV Ativo: <strong>{pdvAtualObjeto?.nome || 'Nenhum'}</strong> ({pdvAtualObjeto?.codigo || ''})
           </p>
         </div>
 
