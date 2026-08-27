@@ -6,7 +6,9 @@ import React, { useState } from 'react';
 // TIPOS E INTERFACES
 // ==========================================
 interface User {
+  id: number;
   nome: string;
+  email: string;
   perfil: 'colaborador' | 'gestor' | 'administrador';
 }
 
@@ -49,7 +51,6 @@ interface RespostaState {
 // ==========================================
 // DADOS DE EXEMPLO (MOCK)
 // ==========================================
-const mockUser: User = { nome: 'Carlos Silva', perfil: 'gestor' };
 const mockPDV: PDV = { id: 1, nome: 'Restaurante Central', codigo: 'PDV-001' };
 const mockChecklist: Checklist = {
   nome: 'Checklist Diário de Operações',
@@ -97,13 +98,26 @@ const mockCasos = [
 // COMPONENTE PRINCIPAL (PAGE)
 // ==========================================
 export default function Page() {
+  // Estado para lista de Usuários (Permite Edição e Exclusão)
+  const [usuarios, setUsuarios] = useState<User[]>([
+    { id: 1, nome: 'Carlos Silva', email: 'carlos@empresa.com', perfil: 'gestor' },
+    { id: 2, nome: 'Ana Souza', email: 'ana@empresa.com', perfil: 'colaborador' },
+    { id: 3, nome: 'Mariana Lima', email: 'mariana@empresa.com', perfil: 'administrador' },
+  ]);
+
+  const [usuarioAtual] = useState<User>(usuarios[0]); // Define usuário ativo
   const [visao, setVisao] = useState<'colaborador' | 'gestor' | 'dashboard'>('colaborador');
   const [abaAtiva, setAbaAtiva] = useState<number>(0);
   const [respostas, setRespostas] = useState<RespostaState>({});
+  
+  // Modais
   const [modalNC, setModalNC] = useState<{ aberto: boolean; tarefaId: number | null }>({ aberto: false, tarefaId: null });
   const [detalhesNC, setDetalhesNC] = useState({ descricao: '', prioridade: 'MEDIA' });
+  
+  const [modalGerenciarUsuarios, setModalGerenciarUsuarios] = useState(false);
+  const [usuarioEmEdicao, setUsuarioEmEdicao] = useState<User | null>(null);
 
-  // Handlers para execução de checklist
+  // Handlers de Checklist
   const handleCheckboxChange = (tarefaId: number, statusConforme: boolean) => {
     setRespostas((prev) => ({
       ...prev,
@@ -130,9 +144,26 @@ export default function Page() {
     setDetalhesNC({ descricao: '', prioridade: 'MEDIA' });
   };
 
+  // Handlers para Gerenciamento de Usuários (Editar e Excluir)
+  const handleExcluirUsuario = (id: number) => {
+    if (confirm('Tem certeza que deseja excluir este usuário?')) {
+      setUsuarios((prev) => prev.filter((u) => u.id !== id));
+      if (usuarioEmEdicao?.id === id) setUsuarioEmEdicao(null);
+    }
+  };
+
+  const handleSalvarEdicaoUsuario = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!usuarioEmEdicao) return;
+
+    setUsuarios((prev) =>
+      prev.map((u) => (u.id === usuarioEmEdicao.id ? usuarioEmEdicao : u))
+    );
+    setUsuarioEmEdicao(null);
+  };
+
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', backgroundColor: '#f3f4f6', minHeight: '100vh', padding: '1.5rem' }}>
-      {/* CSS de Impressão Integrado */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
@@ -141,18 +172,33 @@ export default function Page() {
         }
       `}</style>
 
-      {/* Barra Suprior de Alternância de Visão */}
-      <header className="no-print" style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* Barra Superior */}
+      <header className="no-print" style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', color: '#111827' }}>
             Sistema de Operacionais, Conformidades e PDVs
           </h1>
-          <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>
-            Usuário: <strong>{mockUser.nome}</strong> ({mockUser.perfil})
+          <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>
+            Usuário: <strong>{usuarioAtual.nome}</strong> ({usuarioAtual.perfil})
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            onClick={() => setModalGerenciarUsuarios(true)}
+            style={{
+              padding: '0.5rem 1rem',
+              borderRadius: '6px',
+              border: '1px solid #d1d5db',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              backgroundColor: '#fff',
+              color: '#374151',
+            }}
+          >
+            ⚙️ Gerenciar Usuários
+          </button>
+
           <button
             onClick={() => setVisao('colaborador')}
             style={{
@@ -198,9 +244,7 @@ export default function Page() {
         </div>
       </header>
 
-      {/* ==================================================== */}
-      {/* 1. VISÃO DO COLABORADOR                              */}
-      {/* ==================================================== */}
+      {/* 1. VISÃO DO COLABORADOR */}
       {visao === 'colaborador' && (
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
           <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px', marginBottom: '1rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
@@ -211,7 +255,6 @@ export default function Page() {
             </div>
           </div>
 
-          {/* Abas */}
           <div style={{ display: 'flex', borderBottom: '2px solid #e5e7eb', backgroundColor: '#fff', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
             {mockChecklist.abas.map((aba, index) => (
               <button
@@ -232,7 +275,6 @@ export default function Page() {
             ))}
           </div>
 
-          {/* Lista de Tarefas */}
           <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             {mockChecklist.abas[abaAtiva].tarefas.map((tarefa) => {
               const resp = respostas[tarefa.id] || {};
@@ -306,10 +348,108 @@ export default function Page() {
         </div>
       )}
 
-      {/* Modal de Registro de Não Conformidade */}
+      {/* 2. CENTRAL DE CASOS (GESTOR) */}
+      {visao === 'gestor' && (
+        <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+          <h2 style={{ color: '#111827', marginBottom: '1rem' }}>Central de Ocorrências e Casos</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #dc2626', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>CASOS CRÍTICOS</span>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.5rem', fontWeight: 'bold', color: '#111827' }}>1</p>
+            </div>
+            <div style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #f59e0b', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>EM TRATAMENTO</span>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.5rem', fontWeight: 'bold', color: '#111827' }}>1</p>
+            </div>
+            <div style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #10b981', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>ENCERRADOS HOJE</span>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.5rem', fontWeight: 'bold', color: '#111827' }}>5</p>
+            </div>
+          </div>
+
+          <div style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
+              <thead style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>
+                <tr>
+                  <th style={{ padding: '0.75rem 1rem' }}>Caso</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>PDV / Área</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Descrição</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Prioridade</th>
+                  <th style={{ padding: '0.75rem 1rem' }}>Status</th>
+                  <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mockCasos.map((caso) => (
+                  <tr key={caso.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <td style={{ padding: '0.75rem 1rem', fontWeight: 'bold', color: '#2563eb' }}>{caso.id}</td>
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <div style={{ fontWeight: 'bold' }}>{caso.pdv}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{caso.area}</div>
+                    </td>
+                    <td style={{ padding: '0.75rem 1rem' }}>{caso.descricao}</td>
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <span style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', backgroundColor: caso.prioridade === 'CRÍTICA' ? '#fee2e2' : '#fef3c7', color: caso.prioridade === 'CRÍTICA' ? '#dc2626' : '#d97706' }}>
+                        {caso.prioridade}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <span style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', backgroundColor: '#e0e7ff', color: '#3730a3' }}>
+                        {caso.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                      <button style={{ padding: '0.25rem 0.75rem', backgroundColor: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                        Tratar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 3. DASHBOARD ANALÍTICO */}
+      {visao === 'dashboard' && (
+        <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h2 style={{ color: '#111827', margin: 0 }}>Dashboard de Desempenho Operacional</h2>
+            <button
+              onClick={() => window.print()}
+              className="no-print"
+              style={{ padding: '0.5rem 1rem', backgroundColor: '#111827', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+            >
+              🖨️ Imprimir / Exportar PDF
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div className="card-print" style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>ÍNDICE CONFORMIDADE</span>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.75rem', fontWeight: 'bold', color: '#16a34a' }}>94.8%</p>
+            </div>
+            <div className="card-print" style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>NÃO CONFORMIDADES</span>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.75rem', fontWeight: 'bold', color: '#dc2626' }}>5.2%</p>
+            </div>
+            <div className="card-print" style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>TAXA DE CONCLUSÃO</span>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.75rem', fontWeight: 'bold', color: '#2563eb' }}>98.1%</p>
+            </div>
+            <div className="card-print" style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>TEMPO MÉDIO RESOLUÇÃO</span>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.75rem', fontWeight: 'bold', color: '#9333ea' }}>2.4h</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE REGISTRO DE NÃO CONFORMIDADE */}
       {modalNC.aberto && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyCenter: 'center', zIndex: 1000, padding: '1rem' }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '1.5rem', maxWidth: '450px', width: '100%', margin: 'auto', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '1.5rem', maxWidth: '450px', width: '100%', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
             <h3 style={{ margin: '0 0 1rem 0', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               ⚠️ Registrar Não Conformidade / Caso
             </h3>
@@ -361,145 +501,104 @@ export default function Page() {
         </div>
       )}
 
-      {/* ==================================================== */}
-      {/* 2. CENTRAL DE CASOS (GESTOR)                         */}
-      {/* ==================================================== */}
-      {visao === 'gestor' && (
-        <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-          <h2 style={{ color: '#111827', marginBottom: '1rem' }}>Central de Ocorrências e Casos</h2>
+      {/* MODAL DE GERENCIAMENTO DE USUÁRIOS (EDIÇÃO E EXCLUSÃO) */}
+      {modalGerenciarUsuarios && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '1.5rem', maxWidth: '600px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, color: '#111827' }}>⚙️ Gerenciamento de Usuários</h3>
+              <button
+                onClick={() => {
+                  setModalGerenciarUsuarios(false);
+                  setUsuarioEmEdicao(null);
+                }}
+                style={{ border: 'none', background: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#6b7280' }}
+              >
+                ✕
+              </button>
+            </div>
 
-          {/* Cards Sintéticos */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-            <div style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #dc2626', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>CASOS CRÍTICOS</span>
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.5rem', fontWeight: 'bold', color: '#111827' }}>1</p>
-            </div>
-            <div style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #f59e0b', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>EM TRATAMENTO</span>
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.5rem', fontWeight: 'bold', color: '#111827' }}>1</p>
-            </div>
-            <div style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #10b981', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>ENCERRADOS HOJE</span>
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.5rem', fontWeight: 'bold', color: '#111827' }}>5</p>
-            </div>
-          </div>
+            {/* Formulário de Edição */}
+            {usuarioEmEdicao ? (
+              <form onSubmit={handleSalvarEdicaoUsuario} style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '6px', marginBottom: '1rem', border: '1px solid #e5e7eb' }}>
+                <h4 style={{ margin: '0 0 0.75rem 0', color: '#2563eb' }}>Editar Usuário #{usuarioEmEdicao.id}</h4>
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: '#374151' }}>Nome</label>
+                  <input
+                    type="text"
+                    required
+                    style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db', boxSizing: 'border-box' }}
+                    value={usuarioEmEdicao.nome}
+                    onChange={(e) => setUsuarioEmEdicao({ ...usuarioEmEdicao, nome: e.target.value })}
+                  />
+                </div>
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: '#374151' }}>Perfil</label>
+                  <select
+                    style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }}
+                    value={usuarioEmEdicao.perfil}
+                    onChange={(e) => setUsuarioEmEdicao({ ...usuarioEmEdicao, perfil: e.target.value as User['perfil'] })}
+                  >
+                    <option value="colaborador">Colaborador</option>
+                    <option value="gestor">Gestor</option>
+                    <option value="administrador">Administrador</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => setUsuarioEmEdicao(null)}
+                    style={{ padding: '0.4rem 0.8rem', border: 'none', background: '#e5e7eb', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    style={{ padding: '0.4rem 0.8rem', border: 'none', background: '#2563eb', color: '#fff', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                  >
+                    Salvar Alterações
+                  </button>
+                </div>
+              </form>
+            ) : null}
 
-          {/* Tabela de Casos */}
-          <div style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            {/* Tabela de Usuários */}
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-              <thead style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>
-                <tr>
-                  <th style={{ padding: '0.75rem 1rem' }}>Caso</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>PDV / Área</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Descrição</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Prioridade</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Status</th>
-                  <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Ação</th>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #e5e7eb', color: '#374151' }}>
+                  <th style={{ padding: '0.5rem' }}>Nome</th>
+                  <th style={{ padding: '0.5rem' }}>Perfil</th>
+                  <th style={{ padding: '0.5rem', textAlign: 'right' }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {mockCasos.map((caso) => (
-                  <tr key={caso.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '0.75rem 1rem', fontWeight: 'bold', color: '#2563eb' }}>{caso.id}</td>
-                    <td style={{ padding: '0.75rem 1rem' }}>
-                      <div style={{ fontWeight: 'bold' }}>{caso.pdv}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{caso.area}</div>
+                {usuarios.map((user) => (
+                  <tr key={user.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <td style={{ padding: '0.5rem' }}>
+                      <div style={{ fontWeight: 'bold', color: '#111827' }}>{user.nome}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{user.email}</div>
                     </td>
-                    <td style={{ padding: '0.75rem 1rem' }}>{caso.descricao}</td>
-                    <td style={{ padding: '0.75rem 1rem' }}>
-                      <span style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', backgroundColor: caso.prioridade === 'CRÍTICA' ? '#fee2e2' : '#fef3c7', color: caso.prioridade === 'CRÍTICA' ? '#dc2626' : '#d97706' }}>
-                        {caso.prioridade}
+                    <td style={{ padding: '0.5rem' }}>
+                      <span style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', backgroundColor: '#e5e7eb', color: '#374151' }}>
+                        {user.perfil}
                       </span>
                     </td>
-                    <td style={{ padding: '0.75rem 1rem' }}>
-                      <span style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', backgroundColor: '#e0e7ff', color: '#3730a3' }}>
-                        {caso.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                      <button style={{ padding: '0.25rem 0.75rem', backgroundColor: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-                        Tratar
+                    <td style={{ padding: '0.5rem', textAlign: 'right' }}>
+                      <button
+                        onClick={() => setUsuarioEmEdicao(user)}
+                        style={{ padding: '0.25rem 0.5rem', marginRight: '0.25rem', backgroundColor: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer' }}
+                      >
+                        ✏️ Editar
+                      </button>
+                      <button
+                        onClick={() => handleExcluirUsuario(user.id)}
+                        style={{ padding: '0.25rem 0.5rem', backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                      >
+                        🗑️ Excluir
                       </button>
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================== */}
-      {/* 3. DASHBOARD ANALÍTICO E KPIS                        */}
-      {/* ==================================================== */}
-      {visao === 'dashboard' && (
-        <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2 style={{ color: '#111827', margin: 0 }}>Dashboard de Desempenho Operacional</h2>
-            <button
-              onClick={() => window.print()}
-              className="no-print"
-              style={{ padding: '0.5rem 1rem', backgroundColor: '#111827', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
-            >
-              🖨️ Imprimir / Exportar PDF
-            </button>
-          </div>
-
-          {/* Cards de KPI */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-            <div className="card-print" style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>ÍNDICE CONFORMIDADE</span>
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.75rem', fontWeight: 'bold', color: '#16a34a' }}>94.8%</p>
-            </div>
-            <div className="card-print" style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>NÃO CONFORMIDADES</span>
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.75rem', fontWeight: 'bold', color: '#dc2626' }}>5.2%</p>
-            </div>
-            <div className="card-print" style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>TAXA DE CONCLUSÃO</span>
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.75rem', fontWeight: 'bold', color: '#2563eb' }}>98.1%</p>
-            </div>
-            <div className="card-print" style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>TEMPO MÉDIO RESOLUÇÃO</span>
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.75rem', fontWeight: 'bold', color: '#9333ea' }}>2.4h</p>
-            </div>
-          </div>
-
-          {/* Tabela de Ranking de PDVs */}
-          <div className="card-print" style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ margin: '0 0 1rem 0', color: '#111827' }}>Ranking Comparativo de PDVs</h3>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-              <thead style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                <tr>
-                  <th style={{ padding: '0.5rem 1rem' }}>Posição</th>
-                  <th style={{ padding: '0.5rem 1rem' }}>PDV</th>
-                  <th style={{ padding: '0.5rem 1rem' }}>Conformidade</th>
-                  <th style={{ padding: '0.5rem 1rem' }}>Não Conformidade</th>
-                  <th style={{ padding: '0.5rem 1rem' }}>Checklists Concluídos</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                  <td style={{ padding: '0.5rem 1rem', fontWeight: 'bold', color: '#d97706' }}>1º</td>
-                  <td style={{ padding: '0.5rem 1rem' }}>PDV 04 - Zona Leste</td>
-                  <td style={{ padding: '0.5rem 1rem', fontWeight: 'bold', color: '#16a34a' }}>99.2%</td>
-                  <td style={{ padding: '0.5rem 1rem', color: '#dc2626' }}>0.8%</td>
-                  <td style={{ padding: '0.5rem 1rem' }}>100%</td>
-                </tr>
-                <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                  <td style={{ padding: '0.5rem 1rem', fontWeight: 'bold', color: '#4b5563' }}>2º</td>
-                  <td style={{ padding: '0.5rem 1rem' }}>PDV 01 - Centro Principal</td>
-                  <td style={{ padding: '0.5rem 1rem', fontWeight: 'bold', color: '#16a34a' }}>96.5%</td>
-                  <td style={{ padding: '0.5rem 1rem', color: '#dc2626' }}>3.5%</td>
-                  <td style={{ padding: '0.5rem 1rem' }}>100%</td>
-                </tr>
-                <tr>
-                  <td style={{ padding: '0.5rem 1rem', fontWeight: 'bold', color: '#b45309' }}>3º</td>
-                  <td style={{ padding: '0.5rem 1rem' }}>PDV 02 - Shopping Norte</td>
-                  <td style={{ padding: '0.5rem 1rem', fontWeight: 'bold', color: '#16a34a' }}>91.0%</td>
-                  <td style={{ padding: '0.5rem 1rem', color: '#dc2626' }}>9.0%</td>
-                  <td style={{ padding: '0.5rem 1rem' }}>94%</td>
-                </tr>
               </tbody>
             </table>
           </div>
