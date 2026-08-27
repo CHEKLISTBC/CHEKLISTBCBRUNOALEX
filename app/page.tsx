@@ -44,8 +44,15 @@ interface RespostaState {
 }
 
 // ==========================================
-// DADOS PADRÃO (SÓ USADOS SE O NAVEGADOR ESTIVER VAZIO)
+// CHAVES V4 E DADOS PADRÃO
 // ==========================================
+const KEYS = {
+  USERS: 'v4_check_app_users',
+  PDVS: 'v4_check_app_pdvs',
+  TAREFAS: 'v4_check_app_tarefas',
+  RESPOSTAS: 'v4_check_app_respostas',
+};
+
 const defaultUsers: User[] = [
   { id: 1, nome: 'Carlos Silva', email: 'carlos@empresa.com', perfil: 'gestor' },
   { id: 2, nome: 'Ana Souza', email: 'ana@empresa.com', perfil: 'colaborador' },
@@ -67,25 +74,29 @@ const defaultTarefas: Tarefa[] = [
   { id: 3, abaId: 102, categoria: 'Estoque', descricao: 'Verificar reposição de insumos no balcão', obrigatoria: true },
 ];
 
-// NOVAS CHAVES ATUALIZADAS (V3)
-const KEYS = {
-  USERS: 'app_checklist_db_v3_users',
-  PDVS: 'app_checklist_db_v3_pdvs',
-  TAREFAS: 'app_checklist_db_v3_tarefas',
-  RESPOSTAS: 'app_checklist_db_v3_respostas',
-};
+// Helper seguro para ler o localStorage sem quebrar o SSR do Next.js
+function getStorage<T>(key: string, defaultValue: T): T {
+  if (typeof window === 'undefined') return defaultValue;
+  try {
+    const item = window.localStorage.getItem(key);
+    return item ? JSON.parse(item) : defaultValue;
+  } catch (e) {
+    console.error(`Erro ao carregar ${key}:`, e);
+    return defaultValue;
+  }
+}
 
 export default function Page() {
-  const [isReady, setIsReady] = useState(false);
-  const isLoadedRef = useRef(false);
+  const [mounted, setMounted] = useState(false);
+  const loadedRef = useRef(false);
 
-  // Estados principais
-  const [usuarios, setUsuarios] = useState<User[]>([]);
-  const [pdvs, setPdvs] = useState<PDV[]>([]);
-  const [tarefas, setTarefas] = useState<Tarefa[]>([]);
-  const [respostas, setRespostas] = useState<RespostaState>({});
+  // ESTADOS INICIALIZADOS DIRETAMENTE DO STORAGE
+  const [usuarios, setUsuarios] = useState<User[]>(() => getStorage(KEYS.USERS, defaultUsers));
+  const [pdvs, setPdvs] = useState<PDV[]>(() => getStorage(KEYS.PDVS, defaultPDVs));
+  const [tarefas, setTarefas] = useState<Tarefa[]>(() => getStorage(KEYS.TAREFAS, defaultTarefas));
+  const [respostas, setRespostas] = useState<RespostaState>(() => getStorage(KEYS.RESPOSTAS, {}));
 
-  // Controle de Interface
+  // Interface
   const [pdvSelecionado, setPdvSelecionado] = useState<number>(1);
   const [visao, setVisao] = useState<'colaborador' | 'gestor' | 'cadastros' | 'dashboard'>('colaborador');
   const [abaAtivaIndex, setAbaAtivaIndex] = useState<number>(0);
@@ -98,100 +109,85 @@ export default function Page() {
   const [novoPDV, setNovoPDV] = useState({ nome: '', codigo: '' });
   const [novaTarefa, setNovaTarefa] = useState({ categoria: '', descricao: '', abaId: 101, obrigatoria: true });
 
-  // 1. CARREGAMENTO INICIAL ÚNICO E PROTEGIDO
+  // Evita erro de hidratação (Aguarde renderizar no cliente)
   useEffect(() => {
-    if (typeof window === 'undefined' || isLoadedRef.current) return;
-
-    try {
-      const u = localStorage.getItem(KEYS.USERS);
-      const p = localStorage.getItem(KEYS.PDVS);
-      const t = localStorage.getItem(KEYS.TAREFAS);
-      const r = localStorage.getItem(KEYS.RESPOSTAS);
-
-      setUsuarios(u ? JSON.parse(u) : defaultUsers);
-      setPdvs(p ? JSON.parse(p) : defaultPDVs);
-      setTarefas(t ? JSON.parse(t) : defaultTarefas);
-      setRespostas(r ? JSON.parse(r) : {});
-    } catch (e) {
-      console.error('Erro ao ler o armazenamento local:', e);
-      setUsuarios(defaultUsers);
-      setPdvs(defaultPDVs);
-      setTarefas(defaultTarefas);
-    } finally {
-      isLoadedRef.current = true;
-      setIsReady(true);
-    }
+    setMounted(true);
+    // Trava para indicar que os dados já foram carregados do banco local
+    setTimeout(() => {
+      loadedRef.current = true;
+    }, 100);
   }, []);
 
-  // FUNÇÕES AUXILIARES DE PERSISTÊNCIA DIRETA
-  const guardar = (key: string, data: any) => {
-    if (typeof window !== 'undefined' && isLoadedRef.current) {
-      localStorage.setItem(key, JSON.stringify(data));
+  // SALVAMENTO AUTOMÁTICO REATIVO (Apenas após carregar/montar a tela)
+  useEffect(() => {
+    if (mounted && loadedRef.current) {
+      localStorage.setItem(KEYS.USERS, JSON.stringify(usuarios));
     }
-  };
+  }, [usuarios, mounted]);
 
-  // HANDLERS COM GRAVAÇÃO SÍNCRONA
+  useEffect(() => {
+    if (mounted && loadedRef.current) {
+      localStorage.setItem(KEYS.PDVS, JSON.stringify(pdvs));
+    }
+  }, [pdvs, mounted]);
+
+  useEffect(() => {
+    if (mounted && loadedRef.current) {
+      localStorage.setItem(KEYS.TAREFAS, JSON.stringify(tarefas));
+    }
+  }, [tarefas, mounted]);
+
+  useEffect(() => {
+    if (mounted && loadedRef.current) {
+      localStorage.setItem(KEYS.RESPOSTAS, JSON.stringify(respostas));
+    }
+  }, [respostas, mounted]);
+
+  // HANDLERS
   const handleAddUsuario = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoUsuario.nome || !novoUsuario.email) return;
-    const item: User = { ...novoUsuario, id: Date.now() };
-    const lista = [...usuarios, item];
-    setUsuarios(lista);
-    guardar(KEYS.USERS, lista);
+    setUsuarios((prev) => [...prev, { ...novoUsuario, id: Date.now() }]);
     setNovoUsuario({ nome: '', email: '', perfil: 'colaborador' });
   };
 
   const handleExcluirUsuario = (id: number) => {
     if (confirm('Deseja excluir este usuário?')) {
-      const lista = usuarios.filter((u) => u.id !== id);
-      setUsuarios(lista);
-      guardar(KEYS.USERS, lista);
+      setUsuarios((prev) => prev.filter((u) => u.id !== id));
     }
   };
 
   const handleAddPDV = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoPDV.nome || !novoPDV.codigo) return;
-    const item: PDV = { ...novoPDV, id: Date.now() };
-    const lista = [...pdvs, item];
-    setPdvs(lista);
-    guardar(KEYS.PDVS, lista);
+    setPdvs((prev) => [...prev, { ...novoPDV, id: Date.now() }]);
     setNovoPDV({ nome: '', codigo: '' });
   };
 
   const handleExcluirPDV = (id: number) => {
     if (confirm('Deseja excluir este PDV?')) {
-      const lista = pdvs.filter((p) => p.id !== id);
-      setPdvs(lista);
-      guardar(KEYS.PDVS, lista);
+      setPdvs((prev) => prev.filter((p) => p.id !== id));
     }
   };
 
   const handleAddTarefa = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novaTarefa.descricao || !novaTarefa.categoria) return;
-    const item: Tarefa = { ...novaTarefa, id: Date.now(), abaId: Number(novaTarefa.abaId) };
-    const lista = [...tarefas, item];
-    setTarefas(lista);
-    guardar(KEYS.TAREFAS, lista);
+    setTarefas((prev) => [...prev, { ...novaTarefa, id: Date.now(), abaId: Number(novaTarefa.abaId) }]);
     setNovaTarefa({ categoria: '', descricao: '', abaId: 101, obrigatoria: true });
   };
 
   const handleExcluirTarefa = (id: number) => {
     if (confirm('Deseja excluir esta tarefa?')) {
-      const lista = tarefas.filter((t) => t.id !== id);
-      setTarefas(lista);
-      guardar(KEYS.TAREFAS, lista);
+      setTarefas((prev) => prev.filter((t) => t.id !== id));
     }
   };
 
   const handleCheckboxChange = (tarefaId: number, statusConforme: boolean) => {
-    const novasResp = {
-      ...respostas,
-      [tarefaId]: { ...respostas[tarefaId], conforme: statusConforme },
-    };
-    setRespostas(novasResp);
-    guardar(KEYS.RESPOSTAS, novasResp);
+    setRespostas((prev) => ({
+      ...prev,
+      [tarefaId]: { ...prev[tarefaId], conforme: statusConforme },
+    }));
 
     if (!statusConforme) {
       setModalNC({ aberto: true, tarefaId });
@@ -200,23 +196,22 @@ export default function Page() {
 
   const handleSalvarCasoNC = () => {
     if (modalNC.tarefaId !== null) {
-      const novasResp = {
-        ...respostas,
-        [modalNC.tarefaId]: {
-          ...respostas[modalNC.tarefaId],
+      setRespostas((prev) => ({
+        ...prev,
+        [modalNC.tarefaId!]: {
+          ...prev[modalNC.tarefaId!],
           casoAberto: true,
           ncDetalhes: detalhesNC,
         },
-      };
-      setRespostas(novasResp);
-      guardar(KEYS.RESPOSTAS, novasResp);
+      }));
     }
     setModalNC({ aberto: false, tarefaId: null });
     setDetalhesNC({ descricao: '', prioridade: 'MEDIA' });
   };
 
   const handleResetGeral = () => {
-    if (confirm('Atenção: Isso irá apagar tudo salvo e restaurar os registros iniciais. Confirmar?')) {
+    if (confirm('Isso excluirá todos os seus dados locais e restaurará o padrão. Confirmar?')) {
+      loadedRef.current = false;
       localStorage.removeItem(KEYS.USERS);
       localStorage.removeItem(KEYS.PDVS);
       localStorage.removeItem(KEYS.TAREFAS);
@@ -229,10 +224,10 @@ export default function Page() {
     }
   };
 
-  if (!isReady) {
+  if (!mounted) {
     return (
       <div style={{ padding: '3rem', textAlign: 'center', fontFamily: 'sans-serif' }}>
-        Carregando base de dados local...
+        Sincronizando banco de dados local...
       </div>
     );
   }
@@ -255,24 +250,24 @@ export default function Page() {
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <button onClick={() => setVisao('colaborador')} style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: visao === 'colaborador' ? '#2563eb' : '#e5e7eb', color: visao === 'colaborador' ? '#fff' : '#374151' }}>
-             Checklist
+            Checklist
           </button>
           <button onClick={() => setVisao('gestor')} style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: visao === 'gestor' ? '#2563eb' : '#e5e7eb', color: visao === 'gestor' ? '#fff' : '#374151' }}>
-             Central de Casos
+            Central de Casos
           </button>
           <button onClick={() => setVisao('cadastros')} style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: visao === 'cadastros' ? '#059669' : '#e5e7eb', color: visao === 'cadastros' ? '#fff' : '#374151' }}>
             ⚙️ Cadastros
           </button>
           <button onClick={() => setVisao('dashboard')} style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: visao === 'dashboard' ? '#2563eb' : '#e5e7eb', color: visao === 'dashboard' ? '#fff' : '#374151' }}>
-             Dashboard
+            Dashboard
           </button>
           <button onClick={handleResetGeral} style={{ padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #dc2626', backgroundColor: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold' }}>
-            🔄 Resetar Banco
+            🔄 Zerar Banco
           </button>
         </div>
       </header>
 
-      {/* Checklist */}
+      {/* Visão do Checklist */}
       {visao === 'colaborador' && (
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
           <div style={{ backgroundColor: '#fff', padding: '1rem 1.5rem', borderRadius: '8px', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -400,27 +395,27 @@ export default function Page() {
         </div>
       )}
 
-      {/* Outras áreas */}
+      {/* Áreas secundárias */}
       {visao === 'gestor' && (
         <div style={{ maxWidth: '1000px', margin: '0 auto', backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px' }}>
           <h2>Central de Ocorrências</h2>
-          <p style={{ color: '#6b7280' }}>Visualização de pendências registradas em campo.</p>
+          <p style={{ color: '#6b7280' }}>Painel de ocorrências abertas nos check-lists.</p>
         </div>
       )}
 
       {visao === 'dashboard' && (
         <div style={{ maxWidth: '1000px', margin: '0 auto', backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px' }}>
           <h2>Dashboard de Operações</h2>
-          <p style={{ color: '#6b7280' }}>Estatísticas de conformidade em tempo real.</p>
+          <p style={{ color: '#6b7280' }}>Indicadores de conformidade.</p>
         </div>
       )}
 
-      {/* Modal NC */}
+      {/* Modal Ocorrências */}
       {modalNC.aberto && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
           <div style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '1.5rem', maxWidth: '450px', width: '100%' }}>
             <h3 style={{ margin: '0 0 1rem 0', color: '#dc2626' }}>⚠️ Registrar Ocorrência</h3>
-            <textarea rows={3} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }} value={detalhesNC.descricao} onChange={(e) => setDetalhesNC({ ...detalhesNC, descricao: e.target.value })} placeholder="Detalhe o problema..." />
+            <textarea rows={3} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }} value={detalhesNC.descricao} onChange={(e) => setDetalhesNC({ ...detalhesNC, descricao: e.target.value })} placeholder="Detalhe a não conformidade..." />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
               <button onClick={() => setModalNC({ aberto: false, tarefaId: null })} style={{ padding: '0.5rem 1rem', background: '#e5e7eb', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Cancelar</button>
               <button onClick={handleSalvarCasoNC} style={{ padding: '0.5rem 1rem', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Salvar Ocorrência</button>
