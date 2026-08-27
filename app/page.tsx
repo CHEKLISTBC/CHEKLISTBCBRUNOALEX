@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // ==========================================
 // INTERFACES
@@ -44,14 +44,14 @@ interface RespostaState {
 }
 
 // ==========================================
-// DADOS INICIAIS
+// DADOS PADRÃO (SÓ USADOS SE O NAVEGADOR ESTIVER VAZIO)
 // ==========================================
-const initialUsers: User[] = [
+const defaultUsers: User[] = [
   { id: 1, nome: 'Carlos Silva', email: 'carlos@empresa.com', perfil: 'gestor' },
   { id: 2, nome: 'Ana Souza', email: 'ana@empresa.com', perfil: 'colaborador' },
 ];
 
-const initialPDVs: PDV[] = [
+const defaultPDVs: PDV[] = [
   { id: 1, nome: 'Restaurante Central', codigo: 'PDV-001' },
   { id: 2, nome: 'Shopping Norte', codigo: 'PDV-002' },
 ];
@@ -61,79 +61,137 @@ const initialAbas: Aba[] = [
   { id: 102, nome: 'Atendimento e Exposição' },
 ];
 
-const initialTarefas: Tarefa[] = [
+const defaultTarefas: Tarefa[] = [
   { id: 1, abaId: 101, categoria: 'Higiene', descricao: 'Verificar limpeza do ambiente e pisos', obrigatoria: true },
   { id: 2, abaId: 101, categoria: 'Equipamentos', descricao: 'Verificar funcionamento dos refrigeradores', obrigatoria: true },
   { id: 3, abaId: 102, categoria: 'Estoque', descricao: 'Verificar reposição de insumos no balcão', obrigatoria: true },
 ];
 
-// ==========================================
-// CUSTOM HOOK PARA ARMAZENAMENTO SEGURO (SSR SAFE)
-// ==========================================
-function usePersistentState<T>(key: string, initialValue: T) {
-  const [state, setState] = useState<T>(initialValue);
-  const [loaded, setLoaded] = useState(false);
-
-  // Lê do localStorage uma única vez quando o cliente monta o componente
-  useEffect(() => {
-    try {
-      const item = localStorage.getItem(key);
-      if (item !== null) {
-        setState(JSON.parse(item));
-      }
-    } catch (e) {
-      console.error(`Erro ao carregar chave ${key}:`, e);
-    } finally {
-      setLoaded(true);
-    }
-  }, [key]);
-
-  // Salva no localStorage somente após o carregamento inicial concluído
-  const setValue = (value: T | ((val: T) => T)) => {
-    try {
-      const valueToStore = value instanceof Function ? value(state) : value;
-      setState(valueToStore);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(key, JSON.stringify(valueToStore));
-      }
-    } catch (e) {
-      console.error(`Erro ao gravar chave ${key}:`, e);
-    }
-  };
-
-  return [state, setValue, loaded] as const;
-}
+// NOVAS CHAVES ATUALIZADAS (V3)
+const KEYS = {
+  USERS: 'app_checklist_db_v3_users',
+  PDVS: 'app_checklist_db_v3_pdvs',
+  TAREFAS: 'app_checklist_db_v3_tarefas',
+  RESPOSTAS: 'app_checklist_db_v3_respostas',
+};
 
 export default function Page() {
-  // Uso do Hook de Persistência Segura
-  const [usuarios, setUsuarios, loadedUsuarios] = usePersistentState<User[]>('app_usuarios_v2', initialUsers);
-  const [pdvs, setPdvs, loadedPdvs] = usePersistentState<PDV[]>('app_pdvs_v2', initialPDVs);
-  const [tarefas, setTarefas, loadedTarefas] = usePersistentState<Tarefa[]>('app_tarefas_v2', initialTarefas);
-  const [respostas, setRespostas, loadedRespostas] = usePersistentState<RespostaState>('app_respostas_v2', {});
+  const [isReady, setIsReady] = useState(false);
+  const isLoadedRef = useRef(false);
 
-  // Navegação e Controle
+  // Estados principais
+  const [usuarios, setUsuarios] = useState<User[]>([]);
+  const [pdvs, setPdvs] = useState<PDV[]>([]);
+  const [tarefas, setTarefas] = useState<Tarefa[]>([]);
+  const [respostas, setRespostas] = useState<RespostaState>({});
+
+  // Controle de Interface
   const [pdvSelecionado, setPdvSelecionado] = useState<number>(1);
   const [visao, setVisao] = useState<'colaborador' | 'gestor' | 'cadastros' | 'dashboard'>('colaborador');
   const [abaAtivaIndex, setAbaAtivaIndex] = useState<number>(0);
 
-  // Modais de Cadastro / Edição
+  // Modais e Inputs
   const [modalNC, setModalNC] = useState<{ aberto: boolean; tarefaId: number | null }>({ aberto: false, tarefaId: null });
   const [detalhesNC, setDetalhesNC] = useState({ descricao: '', prioridade: 'MEDIA' });
 
-  // Forms
   const [novoUsuario, setNovoUsuario] = useState({ nome: '', email: '', perfil: 'colaborador' as User['perfil'] });
   const [novoPDV, setNovoPDV] = useState({ nome: '', codigo: '' });
   const [novaTarefa, setNovaTarefa] = useState({ categoria: '', descricao: '', abaId: 101, obrigatoria: true });
 
-  const carregandoGeral = !loadedUsuarios || !loadedPdvs || !loadedTarefas || !loadedRespostas;
+  // 1. CARREGAMENTO INICIAL ÚNICO E PROTEGIDO
+  useEffect(() => {
+    if (typeof window === 'undefined' || isLoadedRef.current) return;
 
-  // Checklist Handlers
+    try {
+      const u = localStorage.getItem(KEYS.USERS);
+      const p = localStorage.getItem(KEYS.PDVS);
+      const t = localStorage.getItem(KEYS.TAREFAS);
+      const r = localStorage.getItem(KEYS.RESPOSTAS);
+
+      setUsuarios(u ? JSON.parse(u) : defaultUsers);
+      setPdvs(p ? JSON.parse(p) : defaultPDVs);
+      setTarefas(t ? JSON.parse(t) : defaultTarefas);
+      setRespostas(r ? JSON.parse(r) : {});
+    } catch (e) {
+      console.error('Erro ao ler o armazenamento local:', e);
+      setUsuarios(defaultUsers);
+      setPdvs(defaultPDVs);
+      setTarefas(defaultTarefas);
+    } finally {
+      isLoadedRef.current = true;
+      setIsReady(true);
+    }
+  }, []);
+
+  // FUNÇÕES AUXILIARES DE PERSISTÊNCIA DIRETA
+  const guardar = (key: string, data: any) => {
+    if (typeof window !== 'undefined' && isLoadedRef.current) {
+      localStorage.setItem(key, JSON.stringify(data));
+    }
+  };
+
+  // HANDLERS COM GRAVAÇÃO SÍNCRONA
+  const handleAddUsuario = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novoUsuario.nome || !novoUsuario.email) return;
+    const item: User = { ...novoUsuario, id: Date.now() };
+    const lista = [...usuarios, item];
+    setUsuarios(lista);
+    guardar(KEYS.USERS, lista);
+    setNovoUsuario({ nome: '', email: '', perfil: 'colaborador' });
+  };
+
+  const handleExcluirUsuario = (id: number) => {
+    if (confirm('Deseja excluir este usuário?')) {
+      const lista = usuarios.filter((u) => u.id !== id);
+      setUsuarios(lista);
+      guardar(KEYS.USERS, lista);
+    }
+  };
+
+  const handleAddPDV = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novoPDV.nome || !novoPDV.codigo) return;
+    const item: PDV = { ...novoPDV, id: Date.now() };
+    const lista = [...pdvs, item];
+    setPdvs(lista);
+    guardar(KEYS.PDVS, lista);
+    setNovoPDV({ nome: '', codigo: '' });
+  };
+
+  const handleExcluirPDV = (id: number) => {
+    if (confirm('Deseja excluir este PDV?')) {
+      const lista = pdvs.filter((p) => p.id !== id);
+      setPdvs(lista);
+      guardar(KEYS.PDVS, lista);
+    }
+  };
+
+  const handleAddTarefa = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novaTarefa.descricao || !novaTarefa.categoria) return;
+    const item: Tarefa = { ...novaTarefa, id: Date.now(), abaId: Number(novaTarefa.abaId) };
+    const lista = [...tarefas, item];
+    setTarefas(lista);
+    guardar(KEYS.TAREFAS, lista);
+    setNovaTarefa({ categoria: '', descricao: '', abaId: 101, obrigatoria: true });
+  };
+
+  const handleExcluirTarefa = (id: number) => {
+    if (confirm('Deseja excluir esta tarefa?')) {
+      const lista = tarefas.filter((t) => t.id !== id);
+      setTarefas(lista);
+      guardar(KEYS.TAREFAS, lista);
+    }
+  };
+
   const handleCheckboxChange = (tarefaId: number, statusConforme: boolean) => {
-    const novasRespostas = {
+    const novasResp = {
       ...respostas,
       [tarefaId]: { ...respostas[tarefaId], conforme: statusConforme },
     };
-    setRespostas(novasRespostas);
+    setRespostas(novasResp);
+    guardar(KEYS.RESPOSTAS, novasResp);
 
     if (!statusConforme) {
       setModalNC({ aberto: true, tarefaId });
@@ -142,66 +200,39 @@ export default function Page() {
 
   const handleSalvarCasoNC = () => {
     if (modalNC.tarefaId !== null) {
-      setRespostas({
+      const novasResp = {
         ...respostas,
         [modalNC.tarefaId]: {
           ...respostas[modalNC.tarefaId],
           casoAberto: true,
           ncDetalhes: detalhesNC,
         },
-      });
+      };
+      setRespostas(novasResp);
+      guardar(KEYS.RESPOSTAS, novasResp);
     }
     setModalNC({ aberto: false, tarefaId: null });
     setDetalhesNC({ descricao: '', prioridade: 'MEDIA' });
   };
 
-  // Cadastros
-  const handleAddUsuario = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!novoUsuario.nome || !novoUsuario.email) return;
-    const item: User = { ...novoUsuario, id: Date.now() };
-    setUsuarios([...usuarios, item]);
-    setNovoUsuario({ nome: '', email: '', perfil: 'colaborador' });
-  };
-
-  const handleExcluirUsuario = (id: number) => {
-    if (confirm('Deseja excluir este usuário?')) {
-      setUsuarios(usuarios.filter((u) => u.id !== id));
+  const handleResetGeral = () => {
+    if (confirm('Atenção: Isso irá apagar tudo salvo e restaurar os registros iniciais. Confirmar?')) {
+      localStorage.removeItem(KEYS.USERS);
+      localStorage.removeItem(KEYS.PDVS);
+      localStorage.removeItem(KEYS.TAREFAS);
+      localStorage.removeItem(KEYS.RESPOSTAS);
+      setUsuarios(defaultUsers);
+      setPdvs(defaultPDVs);
+      setTarefas(defaultTarefas);
+      setRespostas({});
+      window.location.reload();
     }
   };
 
-  const handleAddPDV = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!novoPDV.nome || !novoPDV.codigo) return;
-    const item: PDV = { ...novoPDV, id: Date.now() };
-    setPdvs([...pdvs, item]);
-    setNovoPDV({ nome: '', codigo: '' });
-  };
-
-  const handleExcluirPDV = (id: number) => {
-    if (confirm('Deseja excluir este PDV?')) {
-      setPdvs(pdvs.filter((p) => p.id !== id));
-    }
-  };
-
-  const handleAddTarefa = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!novaTarefa.descricao || !novaTarefa.categoria) return;
-    const item: Tarefa = { ...novaTarefa, id: Date.now(), abaId: Number(novaTarefa.abaId) };
-    setTarefas([...tarefas, item]);
-    setNovaTarefa({ categoria: '', descricao: '', abaId: 101, obrigatoria: true });
-  };
-
-  const handleExcluirTarefa = (id: number) => {
-    if (confirm('Deseja excluir esta tarefa?')) {
-      setTarefas(tarefas.filter((t) => t.id !== id));
-    }
-  };
-
-  if (carregandoGeral) {
+  if (!isReady) {
     return (
-      <div style={{ padding: '3rem', textAlign: 'center', fontFamily: 'sans-serif', color: '#4b5563' }}>
-        Sincronizando banco de dados local...
+      <div style={{ padding: '3rem', textAlign: 'center', fontFamily: 'sans-serif' }}>
+        Carregando base de dados local...
       </div>
     );
   }
@@ -215,14 +246,14 @@ export default function Page() {
       <header style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', color: '#111827' }}>
-            Sistema Integrado de Checklist e Operações
+            Sistema Integrado de Checklist
           </h1>
           <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>
-            PDV Ativo: <strong>{pdvAtualObjeto?.nome || 'Nenhum'}</strong> ({pdvAtualObjeto?.codigo || ''})
+            PDV Ativo: <strong>{pdvAtualObjeto?.nome || 'Nenhum'}</strong> ({pdvAtualObjeto?.codigo || 'N/A'})
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <button onClick={() => setVisao('colaborador')} style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: visao === 'colaborador' ? '#2563eb' : '#e5e7eb', color: visao === 'colaborador' ? '#fff' : '#374151' }}>
              Checklist
           </button>
@@ -230,10 +261,13 @@ export default function Page() {
              Central de Casos
           </button>
           <button onClick={() => setVisao('cadastros')} style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: visao === 'cadastros' ? '#059669' : '#e5e7eb', color: visao === 'cadastros' ? '#fff' : '#374151' }}>
-            ⚙️ Gerenciar / Cadastros
+            ⚙️ Cadastros
           </button>
           <button onClick={() => setVisao('dashboard')} style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: visao === 'dashboard' ? '#2563eb' : '#e5e7eb', color: visao === 'dashboard' ? '#fff' : '#374151' }}>
              Dashboard
+          </button>
+          <button onClick={handleResetGeral} style={{ padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #dc2626', backgroundColor: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold' }}>
+            🔄 Resetar Banco
           </button>
         </div>
       </header>
@@ -262,7 +296,7 @@ export default function Page() {
 
           <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             {tarefasDaAba.length === 0 ? (
-              <p style={{ color: '#6b7280', textAlign: 'center', margin: '2rem 0' }}>Nenhuma tarefa nesta aba. Adicione tarefas em "⚙️ Gerenciar / Cadastros".</p>
+              <p style={{ color: '#6b7280', textAlign: 'center', margin: '2rem 0' }}>Nenhuma tarefa nesta aba. Vá em "⚙️ Cadastros" para adicionar.</p>
             ) : (
               tarefasDaAba.map((tarefa) => {
                 const resp = respostas[tarefa.id] || {};
@@ -297,7 +331,7 @@ export default function Page() {
         </div>
       )}
 
-      {/* Gerenciar Cadastros */}
+      {/* Cadastros */}
       {visao === 'cadastros' && (
         <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'grid', gap: '1.5rem' }}>
           {/* PDVs */}
@@ -305,7 +339,7 @@ export default function Page() {
             <h3 style={{ margin: '0 0 1rem 0', color: '#111827' }}>📍 Gerenciar PDVs</h3>
             <form onSubmit={handleAddPDV} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
               <input type="text" placeholder="Nome do PDV" value={novoPDV.nome} onChange={(e) => setNovoPDV({ ...novoPDV, nome: e.target.value })} style={{ flex: 1, padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
-              <input type="text" placeholder="Código" value={novoPDV.codigo} onChange={(e) => setNovoPDV({ ...novoPDV, codigo: e.target.value })} style={{ width: '180px', padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
+              <input type="text" placeholder="Código (ex: PDV-003)" value={novoPDV.codigo} onChange={(e) => setNovoPDV({ ...novoPDV, codigo: e.target.value })} style={{ width: '180px', padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
               <button type="submit" style={{ padding: '0.5rem 1rem', backgroundColor: '#059669', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>+ Adicionar PDV</button>
             </form>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
@@ -320,7 +354,7 @@ export default function Page() {
 
           {/* Tarefas */}
           <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ margin: '0 0 1rem 0', color: '#111827' }}>📋 Gerenciar Tarefas</h3>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#111827' }}>📋 Gerenciar Tarefas do Checklist</h3>
             <form onSubmit={handleAddTarefa} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
               <input type="text" placeholder="Categoria" value={novaTarefa.categoria} onChange={(e) => setNovaTarefa({ ...novaTarefa, categoria: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
               <input type="text" placeholder="Descrição da Tarefa" value={novaTarefa.descricao} onChange={(e) => setNovaTarefa({ ...novaTarefa, descricao: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
@@ -343,7 +377,7 @@ export default function Page() {
 
           {/* Usuários */}
           <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ margin: '0 0 1rem 0', color: '#111827' }}>👥 Gerenciar Usuários</h3>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#111827' }}>👥 Gerenciar Equipe / Usuários</h3>
             <form onSubmit={handleAddUsuario} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
               <input type="text" placeholder="Nome" value={novoUsuario.nome} onChange={(e) => setNovoUsuario({ ...novoUsuario, nome: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
               <input type="email" placeholder="E-mail" value={novoUsuario.email} onChange={(e) => setNovoUsuario({ ...novoUsuario, email: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
@@ -366,18 +400,18 @@ export default function Page() {
         </div>
       )}
 
-      {/* Central e Dashboard */}
+      {/* Outras áreas */}
       {visao === 'gestor' && (
         <div style={{ maxWidth: '1000px', margin: '0 auto', backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px' }}>
           <h2>Central de Ocorrências</h2>
-          <p style={{ color: '#6b7280' }}>Monitore os itens não conformes cadastrados no sistema.</p>
+          <p style={{ color: '#6b7280' }}>Visualização de pendências registradas em campo.</p>
         </div>
       )}
 
       {visao === 'dashboard' && (
         <div style={{ maxWidth: '1000px', margin: '0 auto', backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px' }}>
-          <h2>Dashboard de Desempenho</h2>
-          <p style={{ color: '#6b7280' }}>Resumo de métricas operacionais.</p>
+          <h2>Dashboard de Operações</h2>
+          <p style={{ color: '#6b7280' }}>Estatísticas de conformidade em tempo real.</p>
         </div>
       )}
 
@@ -386,7 +420,7 @@ export default function Page() {
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
           <div style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '1.5rem', maxWidth: '450px', width: '100%' }}>
             <h3 style={{ margin: '0 0 1rem 0', color: '#dc2626' }}>⚠️ Registrar Ocorrência</h3>
-            <textarea rows={3} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }} value={detalhesNC.descricao} onChange={(e) => setDetalhesNC({ ...detalhesNC, descricao: e.target.value })} placeholder="Detalhe a não conformidade..." />
+            <textarea rows={3} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }} value={detalhesNC.descricao} onChange={(e) => setDetalhesNC({ ...detalhesNC, descricao: e.target.value })} placeholder="Detalhe o problema..." />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
               <button onClick={() => setModalNC({ aberto: false, tarefaId: null })} style={{ padding: '0.5rem 1rem', background: '#e5e7eb', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Cancelar</button>
               <button onClick={handleSalvarCasoNC} style={{ padding: '0.5rem 1rem', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Salvar Ocorrência</button>
