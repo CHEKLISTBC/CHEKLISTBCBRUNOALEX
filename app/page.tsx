@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // ==========================================
-// TIPOS E INTERFACES
+// INTERFACES
 // ==========================================
 interface User {
   id: number;
@@ -23,17 +23,12 @@ interface Tarefa {
   categoria: string;
   descricao: string;
   obrigatoria: boolean;
+  abaId: number;
 }
 
 interface Aba {
   id: number;
   nome: string;
-  tarefas: Tarefa[];
-}
-
-interface Checklist {
-  nome: string;
-  abas: Aba[];
 }
 
 interface RespostaState {
@@ -49,75 +44,83 @@ interface RespostaState {
 }
 
 // ==========================================
-// DADOS DE EXEMPLO (MOCK)
+// DADOS INICIAIS (FALLBACK)
 // ==========================================
-const mockPDV: PDV = { id: 1, nome: 'Restaurante Central', codigo: 'PDV-001' };
-const mockChecklist: Checklist = {
-  nome: 'Checklist Diário de Operações',
-  abas: [
-    {
-      id: 101,
-      nome: 'Abertura do PDV',
-      tarefas: [
-        { id: 1, categoria: 'Higiene', descricao: 'Verificar limpeza do ambiente e pisos', obrigatoria: true },
-        { id: 2, categoria: 'Equipamentos', descricao: 'Verificar funcionamento dos refrigeradores', obrigatoria: true },
-        { id: 3, categoria: 'Organização', descricao: 'Verificar organização das mesas e salão', obrigatoria: false },
-      ],
-    },
-    {
-      id: 102,
-      nome: 'Atendimento e Exposição',
-      tarefas: [
-        { id: 4, categoria: 'Estoque', descricao: 'Verificar reposição de insumos no balcão', obrigatoria: true },
-        { id: 5, categoria: 'Segurança', descricao: 'Conferir EPIs da equipe operacional', obrigatoria: true },
-      ],
-    },
-  ],
-};
-
-const mockCasos = [
-  {
-    id: 'NC-83921',
-    pdv: 'PDV 01 - Centro',
-    area: 'Abertura / Equipamentos',
-    descricao: 'Geladeira de bebidas com temperatura acima do limite (12°C).',
-    prioridade: 'CRÍTICA',
-    status: 'EM TRATAMENTO',
-  },
-  {
-    id: 'NC-83922',
-    pdv: 'PDV 03 - Shopping',
-    area: 'Atendimento / Limpeza',
-    descricao: 'Ausência de lixeiras padronizadas no salão.',
-    prioridade: 'MÉDIA',
-    status: 'ABERTO',
-  },
+const initialUsers: User[] = [
+  { id: 1, nome: 'Carlos Silva', email: 'carlos@empresa.com', perfil: 'gestor' },
+  { id: 2, nome: 'Ana Souza', email: 'ana@empresa.com', perfil: 'colaborador' },
 ];
 
-// ==========================================
-// COMPONENTE PRINCIPAL (PAGE)
-// ==========================================
-export default function Page() {
-  // Estado para lista de Usuários (Permite Edição e Exclusão)
-  const [usuarios, setUsuarios] = useState<User[]>([
-    { id: 1, nome: 'Carlos Silva', email: 'carlos@empresa.com', perfil: 'gestor' },
-    { id: 2, nome: 'Ana Souza', email: 'ana@empresa.com', perfil: 'colaborador' },
-    { id: 3, nome: 'Mariana Lima', email: 'mariana@empresa.com', perfil: 'administrador' },
-  ]);
+const initialPDVs: PDV[] = [
+  { id: 1, nome: 'Restaurante Central', codigo: 'PDV-001' },
+  { id: 2, nome: 'Shopping Norte', codigo: 'PDV-002' },
+];
 
-  const [usuarioAtual] = useState<User>(usuarios[0]); // Define usuário ativo
-  const [visao, setVisao] = useState<'colaborador' | 'gestor' | 'dashboard'>('colaborador');
-  const [abaAtiva, setAbaAtiva] = useState<number>(0);
+const initialAbas: Aba[] = [
+  { id: 101, nome: 'Abertura do PDV' },
+  { id: 102, nome: 'Atendimento e Exposição' },
+];
+
+const initialTarefas: Tarefa[] = [
+  { id: 1, abaId: 101, categoria: 'Higiene', descricao: 'Verificar limpeza do ambiente e pisos', obrigatoria: true },
+  { id: 2, abaId: 101, categoria: 'Equipamentos', descricao: 'Verificar funcionamento dos refrigeradores', obrigatoria: true },
+  { id: 3, abaId: 102, categoria: 'Estoque', descricao: 'Verificar reposição de insumos no balcão', obrigatoria: true },
+];
+
+export default function Page() {
+  // 1. ESTADOS COM CARREGAMENTO DO LOCALSTORAGE
+  const [usuarios, setUsuarios] = useState<User[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('app_usuarios');
+      return saved ? JSON.parse(saved) : initialUsers;
+    }
+    return initialUsers;
+  });
+
+  const [pdvs, setPdvs] = useState<PDV[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('app_pdvs');
+      return saved ? JSON.parse(saved) : initialPDVs;
+    }
+    return initialPDVs;
+  });
+
+  const [tarefas, setTarefas] = useState<Tarefa[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('app_tarefas');
+      return saved ? JSON.parse(saved) : initialTarefas;
+    }
+    return initialTarefas;
+  });
+
+  const [pdvSelecionado, setPdvSelecionado] = useState<number>(1);
+  const [visao, setVisao] = useState<'colaborador' | 'gestor' | 'cadastros' | 'dashboard'>('colaborador');
+  const [abaAtivaIndex, setAbaAtivaIndex] = useState<number>(0);
   const [respostas, setRespostas] = useState<RespostaState>({});
-  
-  // Modais
+
+  // Modais de Cadastro / Edição
   const [modalNC, setModalNC] = useState<{ aberto: boolean; tarefaId: number | null }>({ aberto: false, tarefaId: null });
   const [detalhesNC, setDetalhesNC] = useState({ descricao: '', prioridade: 'MEDIA' });
-  
-  const [modalGerenciarUsuarios, setModalGerenciarUsuarios] = useState(false);
-  const [usuarioEmEdicao, setUsuarioEmEdicao] = useState<User | null>(null);
 
-  // Handlers de Checklist
+  // Formulários de Edição
+  const [novoUsuario, setNovoUsuario] = useState({ nome: '', email: '', perfil: 'colaborador' as User['perfil'] });
+  const [novoPDV, setNovoPDV] = useState({ nome: '', codigo: '' });
+  const [novaTarefa, setNovaTarefa] = useState({ categoria: '', descricao: '', abaId: 101, obrigatoria: true });
+
+  // 2. PERSISTÊNCIA AUTOMÁTICA EM LOCALSTORAGE
+  useEffect(() => {
+    localStorage.setItem('app_usuarios', JSON.stringify(usuarios));
+  }, [usuarios]);
+
+  useEffect(() => {
+    localStorage.setItem('app_pdvs', JSON.stringify(pdvs));
+  }, [pdvs]);
+
+  useEffect(() => {
+    localStorage.setItem('app_tarefas', JSON.stringify(tarefas));
+  }, [tarefas]);
+
+  // Handlers do Checklist
   const handleCheckboxChange = (tarefaId: number, statusConforme: boolean) => {
     setRespostas((prev) => ({
       ...prev,
@@ -144,463 +147,227 @@ export default function Page() {
     setDetalhesNC({ descricao: '', prioridade: 'MEDIA' });
   };
 
-  // Handlers para Gerenciamento de Usuários (Editar e Excluir)
-  const handleExcluirUsuario = (id: number) => {
-    if (confirm('Tem certeza que deseja excluir este usuário?')) {
-      setUsuarios((prev) => prev.filter((u) => u.id !== id));
-      if (usuarioEmEdicao?.id === id) setUsuarioEmEdicao(null);
-    }
-  };
-
-  const handleSalvarEdicaoUsuario = (e: React.FormEvent) => {
+  // Handlers de Criação e Exclusão
+  const handleAddUsuario = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!usuarioEmEdicao) return;
-
-    setUsuarios((prev) =>
-      prev.map((u) => (u.id === usuarioEmEdicao.id ? usuarioEmEdicao : u))
-    );
-    setUsuarioEmEdicao(null);
+    if (!novoUsuario.nome || !novoUsuario.email) return;
+    setUsuarios([...usuarios, { ...novoUsuario, id: Date.now() }]);
+    setNovoUsuario({ nome: '', email: '', perfil: 'colaborador' });
   };
+
+  const handleExcluirUsuario = (id: number) => {
+    if (confirm('Deseja excluir este usuário?')) setUsuarios(usuarios.filter((u) => u.id !== id));
+  };
+
+  const handleAddPDV = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novoPDV.nome || !novoPDV.codigo) return;
+    setPdvs([...pdvs, { ...novoPDV, id: Date.now() }]);
+    setNovoPDV({ nome: '', codigo: '' });
+  };
+
+  const handleExcluirPDV = (id: number) => {
+    if (confirm('Deseja excluir este PDV?')) setPdvs(pdvs.filter((p) => p.id !== id));
+  };
+
+  const handleAddTarefa = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novaTarefa.descricao || !novaTarefa.categoria) return;
+    setTarefas([...tarefas, { ...novaTarefa, id: Date.now(), abaId: Number(novaTarefa.abaId) }]);
+    setNovaTarefa({ categoria: '', descricao: '', abaId: 101, obrigatoria: true });
+  };
+
+  const handleExcluirTarefa = (id: number) => {
+    if (confirm('Deseja excluir esta tarefa?')) setTarefas(tarefas.filter((t) => t.id !== id));
+  };
+
+  const abaAtual = initialAbas[abaAtivaIndex] || initialAbas[0];
+  const tarefasDaAba = tarefas.filter((t) => t.abaId === abaAtual.id);
+  const pdvAtualObjeto = pdvs.find((p) => p.id === pdvSelecionado) || pdvs[0];
 
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', backgroundColor: '#f3f4f6', minHeight: '100vh', padding: '1.5rem' }}>
-      <style>{`
-        @media print {
-          .no-print { display: none !important; }
-          body { background-color: #fff !important; padding: 0 !important; }
-          .card-print { box-shadow: none !important; border: 1px solid #ccc !important; }
-        }
-      `}</style>
-
-      {/* Barra Superior */}
-      <header className="no-print" style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+      {/* Barra de Navegação Superior */}
+      <header style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', color: '#111827' }}>
-            Sistema de Operacionais, Conformidades e PDVs
+            Sistema Integrado de Checklist e Operações
           </h1>
           <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>
-            Usuário: <strong>{usuarioAtual.nome}</strong> ({usuarioAtual.perfil})
+            PDV Ativo: <strong>{pdvAtualObjeto?.nome || 'Nenhum'}</strong> ({pdvAtualObjeto?.codigo})
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <button
-            onClick={() => setModalGerenciarUsuarios(true)}
-            style={{
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              border: '1px solid #d1d5db',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              backgroundColor: '#fff',
-              color: '#374151',
-            }}
-          >
-            ⚙️ Gerenciar Usuários
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button onClick={() => setVisao('colaborador')} style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: visao === 'colaborador' ? '#2563eb' : '#e5e7eb', color: visao === 'colaborador' ? '#fff' : '#374151' }}>
+             Checklist
           </button>
-
-          <button
-            onClick={() => setVisao('colaborador')}
-            style={{
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              backgroundColor: visao === 'colaborador' ? '#2563eb' : '#e5e7eb',
-              color: visao === 'colaborador' ? '#fff' : '#374151',
-            }}
-          >
-            Área do Colaborador
+          <button onClick={() => setVisao('gestor')} style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: visao === 'gestor' ? '#2563eb' : '#e5e7eb', color: visao === 'gestor' ? '#fff' : '#374151' }}>
+             Central de Casos
           </button>
-          <button
-            onClick={() => setVisao('gestor')}
-            style={{
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              backgroundColor: visao === 'gestor' ? '#2563eb' : '#e5e7eb',
-              color: visao === 'gestor' ? '#fff' : '#374151',
-            }}
-          >
-            Central de Casos
+          <button onClick={() => setVisao('cadastros')} style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: visao === 'cadastros' ? '#059669' : '#e5e7eb', color: visao === 'cadastros' ? '#fff' : '#374151' }}>
+            ⚙️ Gerenciar / Cadastros
           </button>
-          <button
-            onClick={() => setVisao('dashboard')}
-            style={{
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              backgroundColor: visao === 'dashboard' ? '#2563eb' : '#e5e7eb',
-              color: visao === 'dashboard' ? '#fff' : '#374151',
-            }}
-          >
-            Dashboard / KPIs
+          <button onClick={() => setVisao('dashboard')} style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: visao === 'dashboard' ? '#2563eb' : '#e5e7eb', color: visao === 'dashboard' ? '#fff' : '#374151' }}>
+             Dashboard
           </button>
         </div>
       </header>
 
-      {/* 1. VISÃO DO COLABORADOR */}
+      {/* 1. VISÃO DE EXECUÇÃO DO CHECKLIST */}
       {visao === 'colaborador' && (
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-          <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px', marginBottom: '1rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <h2 style={{ margin: 0, color: '#1f2937' }}>Execução de Checklist</h2>
-            <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#4b5563', display: 'flex', gap: '1.5rem' }}>
-              <span><strong>PDV:</strong> {mockPDV.nome}</span>
-              <span><strong>Checklist:</strong> {mockChecklist.nome}</span>
-            </div>
+          <div style={{ backgroundColor: '#fff', padding: '1rem 1.5rem', borderRadius: '8px', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label style={{ fontWeight: 'bold', color: '#374151' }}>
+              Selecione o PDV:
+              <select value={pdvSelecionado} onChange={(e) => setPdvSelecionado(Number(e.target.value))} style={{ marginLeft: '0.5rem', padding: '0.4rem', borderRadius: '4px', border: '1px solid #d1d5db' }}>
+                {pdvs.map((p) => (
+                  <option key={p.id} value={p.id}>{p.nome} ({p.codigo})</option>
+                ))}
+              </select>
+            </label>
           </div>
 
           <div style={{ display: 'flex', borderBottom: '2px solid #e5e7eb', backgroundColor: '#fff', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
-            {mockChecklist.abas.map((aba, index) => (
-              <button
-                key={aba.id}
-                onClick={() => setAbaAtiva(index)}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  border: 'none',
-                  background: 'none',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  color: abaAtiva === index ? '#2563eb' : '#6b7280',
-                  borderBottom: abaAtiva === index ? '3px solid #2563eb' : 'none',
-                }}
-              >
+            {initialAbas.map((aba, index) => (
+              <button key={aba.id} onClick={() => setAbaAtivaIndex(index)} style={{ padding: '0.75rem 1.5rem', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 'bold', color: abaAtivaIndex === index ? '#2563eb' : '#6b7280', borderBottom: abaAtivaIndex === index ? '3px solid #2563eb' : 'none' }}>
                 {aba.nome}
               </button>
             ))}
           </div>
 
           <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            {mockChecklist.abas[abaAtiva].tarefas.map((tarefa) => {
-              const resp = respostas[tarefa.id] || {};
-              return (
-                <div
-                  key={tarefa.id}
-                  style={{
-                    padding: '1rem',
-                    marginBottom: '1rem',
-                    borderRadius: '6px',
-                    backgroundColor: '#f9fafb',
-                    border: '1px solid #e5e7eb',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <div>
-                    <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', backgroundColor: '#e5e7eb', borderRadius: '4px', marginRight: '0.5rem', fontWeight: 'bold', color: '#374151' }}>
-                      {tarefa.categoria}
-                    </span>
-                    <span style={{ fontWeight: '500', color: '#111827' }}>{tarefa.descricao}</span>
-                    {tarefa.obrigatoria && <span style={{ color: '#ef4444', fontSize: '0.75rem', marginLeft: '0.25rem' }}>*</span>}
-                    {resp.casoAberto && (
-                      <div style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: '0.25rem', fontWeight: 'bold' }}>
-                        Ocorrência registrada: {resp.ncDetalhes?.descricao}
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button
-                      onClick={() => handleCheckboxChange(tarefa.id, true)}
-                      style={{
-                        padding: '0.5rem 1rem',
-                        borderRadius: '6px',
-                        border: '1px solid #16a34a',
-                        cursor: 'pointer',
-                        fontWeight: 'bold',
-                        backgroundColor: resp.conforme === true ? '#16a34a' : '#fff',
-                        color: resp.conforme === true ? '#fff' : '#16a34a',
-                      }}
-                    >
-                      ✓ Conforme
-                    </button>
-                    <button
-                      onClick={() => handleCheckboxChange(tarefa.id, false)}
-                      style={{
-                        padding: '0.5rem 1rem',
-                        borderRadius: '6px',
-                        border: '1px solid #dc2626',
-                        cursor: 'pointer',
-                        fontWeight: 'bold',
-                        backgroundColor: resp.conforme === false ? '#dc2626' : '#fff',
-                        color: resp.conforme === false ? '#fff' : '#dc2626',
-                      }}
-                    >
-                      ✕ Não Conforme
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-
-            <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
-              <button style={{ padding: '0.75rem 1.5rem', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
-                Finalizar Checklist
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 2. CENTRAL DE CASOS (GESTOR) */}
-      {visao === 'gestor' && (
-        <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-          <h2 style={{ color: '#111827', marginBottom: '1rem' }}>Central de Ocorrências e Casos</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-            <div style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #dc2626', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>CASOS CRÍTICOS</span>
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.5rem', fontWeight: 'bold', color: '#111827' }}>1</p>
-            </div>
-            <div style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #f59e0b', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>EM TRATAMENTO</span>
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.5rem', fontWeight: 'bold', color: '#111827' }}>1</p>
-            </div>
-            <div style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #10b981', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>ENCERRADOS HOJE</span>
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.5rem', fontWeight: 'bold', color: '#111827' }}>5</p>
-            </div>
-          </div>
-
-          <div style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-              <thead style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>
-                <tr>
-                  <th style={{ padding: '0.75rem 1rem' }}>Caso</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>PDV / Área</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Descrição</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Prioridade</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Status</th>
-                  <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Ação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mockCasos.map((caso) => (
-                  <tr key={caso.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '0.75rem 1rem', fontWeight: 'bold', color: '#2563eb' }}>{caso.id}</td>
-                    <td style={{ padding: '0.75rem 1rem' }}>
-                      <div style={{ fontWeight: 'bold' }}>{caso.pdv}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{caso.area}</div>
-                    </td>
-                    <td style={{ padding: '0.75rem 1rem' }}>{caso.descricao}</td>
-                    <td style={{ padding: '0.75rem 1rem' }}>
-                      <span style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', backgroundColor: caso.prioridade === 'CRÍTICA' ? '#fee2e2' : '#fef3c7', color: caso.prioridade === 'CRÍTICA' ? '#dc2626' : '#d97706' }}>
-                        {caso.prioridade}
+            {tarefasDaAba.length === 0 ? (
+              <p style={{ color: '#6b7280', textAlign: 'center', margin: '2rem 0' }}>Nenhuma tarefa cadastrada nesta aba. Vá em "⚙️ Gerenciar / Cadastros" para adicionar.</p>
+            ) : (
+              tarefasDaAba.map((tarefa) => {
+                const resp = respostas[tarefa.id] || {};
+                return (
+                  <div key={tarefa.id} style={{ padding: '1rem', marginBottom: '1rem', borderRadius: '6px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', backgroundColor: '#e5e7eb', borderRadius: '4px', marginRight: '0.5rem', fontWeight: 'bold', color: '#374151' }}>
+                        {tarefa.categoria}
                       </span>
-                    </td>
-                    <td style={{ padding: '0.75rem 1rem' }}>
-                      <span style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', backgroundColor: '#e0e7ff', color: '#3730a3' }}>
-                        {caso.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                      <button style={{ padding: '0.25rem 0.75rem', backgroundColor: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-                        Tratar
+                      <span style={{ fontWeight: '500', color: '#111827' }}>{tarefa.descricao}</span>
+                      {tarefa.obrigatoria && <span style={{ color: '#ef4444', marginLeft: '0.25rem' }}>*</span>}
+                      {resp.casoAberto && (
+                        <div style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: '0.25rem', fontWeight: 'bold' }}>
+                          Ocorrência: {resp.ncDetalhes?.descricao}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button onClick={() => handleCheckboxChange(tarefa.id, true)} style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #16a34a', cursor: 'pointer', fontWeight: 'bold', backgroundColor: resp.conforme === true ? '#16a34a' : '#fff', color: resp.conforme === true ? '#fff' : '#16a34a' }}>
+                        ✓ Conforme
                       </button>
-                    </td>
-                  </tr>
+                      <button onClick={() => handleCheckboxChange(tarefa.id, false)} style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #dc2626', cursor: 'pointer', fontWeight: 'bold', backgroundColor: resp.conforme === false ? '#dc2626' : '#fff', color: resp.conforme === false ? '#fff' : '#dc2626' }}>
+                        ✕ Não Conforme
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 2. ÁREA DE CADASTROS E GERENCIAMENTO (PDVs, TAREFAS, USUÁRIOS) */}
+      {visao === 'cadastros' && (
+        <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'grid', gap: '1.5rem' }}>
+          {/* Cadastro de PDVs */}
+          <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#111827' }}>📍 Gerenciar PDVs (Pontos de Venda)</h3>
+            <form onSubmit={handleAddPDV} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+              <input type="text" placeholder="Nome do PDV" value={novoPDV.nome} onChange={(e) => setNovoPDV({ ...novoPDV, nome: e.target.value })} style={{ flex: 1, padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
+              <input type="text" placeholder="Código (Ex: PDV-003)" value={novoPDV.codigo} onChange={(e) => setNovoPDV({ ...novoPDV, codigo: e.target.value })} style={{ width: '180px', padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
+              <button type="submit" style={{ padding: '0.5rem 1rem', backgroundColor: '#059669', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>+ Adicionar PDV</button>
+            </form>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {pdvs.map((p) => (
+                <li key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #f3f4f6' }}>
+                  <span><strong>{p.nome}</strong> ({p.codigo})</span>
+                  <button onClick={() => handleExcluirPDV(p.id)} style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Excluir</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Cadastro de Tarefas do Checklist */}
+          <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#111827' }}>📋 Gerenciar Tarefas do Checklist</h3>
+            <form onSubmit={handleAddTarefa} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
+              <input type="text" placeholder="Categoria (ex: Higiene)" value={novaTarefa.categoria} onChange={(e) => setNovaTarefa({ ...novaTarefa, categoria: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
+              <input type="text" placeholder="Descrição da Tarefa" value={novaTarefa.descricao} onChange={(e) => setNovaTarefa({ ...novaTarefa, descricao: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
+              <select value={novaTarefa.abaId} onChange={(e) => setNovaTarefa({ ...novaTarefa, abaId: Number(e.target.value) })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }}>
+                {initialAbas.map((a) => (
+                  <option key={a.id} value={a.id}>{a.nome}</option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+              <button type="submit" style={{ padding: '0.5rem 1rem', backgroundColor: '#059669', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>+ Adicionar Tarefa</button>
+            </form>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {tarefas.map((t) => (
+                <li key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #f3f4f6' }}>
+                  <span>[{t.categoria}] {t.descricao} - <em>Aba: {initialAbas.find((a) => a.id === t.abaId)?.nome}</em></span>
+                  <button onClick={() => handleExcluirTarefa(t.id)} style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Excluir</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Cadastro de Usuários */}
+          <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#111827' }}>👥 Gerenciar Equipe / Usuários</h3>
+            <form onSubmit={handleAddUsuario} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
+              <input type="text" placeholder="Nome" value={novoUsuario.nome} onChange={(e) => setNovoUsuario({ ...novoUsuario, nome: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
+              <input type="email" placeholder="E-mail" value={novoUsuario.email} onChange={(e) => setNovoUsuario({ ...novoUsuario, email: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
+              <select value={novoUsuario.perfil} onChange={(e) => setNovoUsuario({ ...novoUsuario, perfil: e.target.value as User['perfil'] })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }}>
+                <option value="colaborador">Colaborador</option>
+                <option value="gestor">Gestor</option>
+                <option value="administrador">Administrador</option>
+              </select>
+              <button type="submit" style={{ padding: '0.5rem 1rem', backgroundColor: '#059669', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>+ Adicionar Usuário</button>
+            </form>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {usuarios.map((u) => (
+                <li key={u.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #f3f4f6' }}>
+                  <span><strong>{u.nome}</strong> ({u.email}) - <small>{u.perfil}</small></span>
+                  <button onClick={() => handleExcluirUsuario(u.id)} style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Excluir</button>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       )}
 
-      {/* 3. DASHBOARD ANALÍTICO */}
+      {/* 3. CENTRAL DE CASOS */}
+      {visao === 'gestor' && (
+        <div style={{ maxWidth: '1000px', margin: '0 auto', backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px' }}>
+          <h2>Central de Ocorrências</h2>
+          <p style={{ color: '#6b7280' }}>Monitore os itens não conformes registrados pelas equipes de campo.</p>
+        </div>
+      )}
+
+      {/* 4. DASHBOARD */}
       {visao === 'dashboard' && (
-        <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2 style={{ color: '#111827', margin: 0 }}>Dashboard de Desempenho Operacional</h2>
-            <button
-              onClick={() => window.print()}
-              className="no-print"
-              style={{ padding: '0.5rem 1rem', backgroundColor: '#111827', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
-            >
-              🖨️ Imprimir / Exportar PDF
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-            <div className="card-print" style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>ÍNDICE CONFORMIDADE</span>
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.75rem', fontWeight: 'bold', color: '#16a34a' }}>94.8%</p>
-            </div>
-            <div className="card-print" style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>NÃO CONFORMIDADES</span>
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.75rem', fontWeight: 'bold', color: '#dc2626' }}>5.2%</p>
-            </div>
-            <div className="card-print" style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>TAXA DE CONCLUSÃO</span>
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.75rem', fontWeight: 'bold', color: '#2563eb' }}>98.1%</p>
-            </div>
-            <div className="card-print" style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'bold' }}>TEMPO MÉDIO RESOLUÇÃO</span>
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.75rem', fontWeight: 'bold', color: '#9333ea' }}>2.4h</p>
-            </div>
-          </div>
+        <div style={{ maxWidth: '1000px', margin: '0 auto', backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px' }}>
+          <h2>Dashboard de Desempenho</h2>
+          <p style={{ color: '#6b7280' }}>Visão geral do índice de conformidades gerais.</p>
         </div>
       )}
 
-      {/* MODAL DE REGISTRO DE NÃO CONFORMIDADE */}
+      {/* MODAL DE NÃO CONFORMIDADE */}
       {modalNC.aberto && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '1.5rem', maxWidth: '450px', width: '100%', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ margin: '0 0 1rem 0', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              ⚠️ Registrar Não Conformidade / Caso
-            </h3>
-
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.25rem', color: '#374151' }}>
-                Descrição da Ocorrência
-              </label>
-              <textarea
-                rows={3}
-                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box' }}
-                value={detalhesNC.descricao}
-                onChange={(e) => setDetalhesNC({ ...detalhesNC, descricao: e.target.value })}
-                placeholder="Informe os detalhes do problema..."
-              />
+          <div style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '1.5rem', maxWidth: '450px', width: '100%' }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#dc2626' }}>⚠️ Registrar Ocorrência</h3>
+            <textarea rows={3} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }} value={detalhesNC.descricao} onChange={(e) => setDetalhesNC({ ...detalhesNC, descricao: e.target.value })} placeholder="Detalhe a não conformidade..." />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
+              <button onClick={() => setModalNC({ aberto: false, tarefaId: null })} style={{ padding: '0.5rem 1rem', background: '#e5e7eb', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={handleSalvarCasoNC} style={{ padding: '0.5rem 1rem', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Salvar Ocorrência</button>
             </div>
-
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.25rem', color: '#374151' }}>
-                Prioridade
-              </label>
-              <select
-                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
-                value={detalhesNC.prioridade}
-                onChange={(e) => setDetalhesNC({ ...detalhesNC, prioridade: e.target.value })}
-              >
-                <option value="BAIXA">Baixa</option>
-                <option value="MEDIA">Média</option>
-                <option value="ALTA">Alta</option>
-                <option value="CRITICA">Crítica</option>
-              </select>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1.5rem' }}>
-              <button
-                onClick={() => setModalNC({ aberto: false, tarefaId: null })}
-                style={{ padding: '0.5rem 1rem', border: 'none', background: '#e5e7eb', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSalvarCasoNC}
-                style={{ padding: '0.5rem 1rem', border: 'none', background: '#dc2626', color: '#fff', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
-              >
-                Abrir Caso
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE GERENCIAMENTO DE USUÁRIOS (EDIÇÃO E EXCLUSÃO) */}
-      {modalGerenciarUsuarios && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '1.5rem', maxWidth: '600px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, color: '#111827' }}>⚙️ Gerenciamento de Usuários</h3>
-              <button
-                onClick={() => {
-                  setModalGerenciarUsuarios(false);
-                  setUsuarioEmEdicao(null);
-                }}
-                style={{ border: 'none', background: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#6b7280' }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Formulário de Edição */}
-            {usuarioEmEdicao ? (
-              <form onSubmit={handleSalvarEdicaoUsuario} style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '6px', marginBottom: '1rem', border: '1px solid #e5e7eb' }}>
-                <h4 style={{ margin: '0 0 0.75rem 0', color: '#2563eb' }}>Editar Usuário #{usuarioEmEdicao.id}</h4>
-                <div style={{ marginBottom: '0.75rem' }}>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: '#374151' }}>Nome</label>
-                  <input
-                    type="text"
-                    required
-                    style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db', boxSizing: 'border-box' }}
-                    value={usuarioEmEdicao.nome}
-                    onChange={(e) => setUsuarioEmEdicao({ ...usuarioEmEdicao, nome: e.target.value })}
-                  />
-                </div>
-                <div style={{ marginBottom: '0.75rem' }}>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: '#374151' }}>Perfil</label>
-                  <select
-                    style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }}
-                    value={usuarioEmEdicao.perfil}
-                    onChange={(e) => setUsuarioEmEdicao({ ...usuarioEmEdicao, perfil: e.target.value as User['perfil'] })}
-                  >
-                    <option value="colaborador">Colaborador</option>
-                    <option value="gestor">Gestor</option>
-                    <option value="administrador">Administrador</option>
-                  </select>
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                  <button
-                    type="button"
-                    onClick={() => setUsuarioEmEdicao(null)}
-                    style={{ padding: '0.4rem 0.8rem', border: 'none', background: '#e5e7eb', borderRadius: '4px', cursor: 'pointer' }}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    style={{ padding: '0.4rem 0.8rem', border: 'none', background: '#2563eb', color: '#fff', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
-                  >
-                    Salvar Alterações
-                  </button>
-                </div>
-              </form>
-            ) : null}
-
-            {/* Tabela de Usuários */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #e5e7eb', color: '#374151' }}>
-                  <th style={{ padding: '0.5rem' }}>Nome</th>
-                  <th style={{ padding: '0.5rem' }}>Perfil</th>
-                  <th style={{ padding: '0.5rem', textAlign: 'right' }}>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {usuarios.map((user) => (
-                  <tr key={user.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '0.5rem' }}>
-                      <div style={{ fontWeight: 'bold', color: '#111827' }}>{user.nome}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{user.email}</div>
-                    </td>
-                    <td style={{ padding: '0.5rem' }}>
-                      <span style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', backgroundColor: '#e5e7eb', color: '#374151' }}>
-                        {user.perfil}
-                      </span>
-                    </td>
-                    <td style={{ padding: '0.5rem', textAlign: 'right' }}>
-                      <button
-                        onClick={() => setUsuarioEmEdicao(user)}
-                        style={{ padding: '0.25rem 0.5rem', marginRight: '0.25rem', backgroundColor: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer' }}
-                      >
-                        ✏️ Editar
-                      </button>
-                      <button
-                        onClick={() => handleExcluirUsuario(user.id)}
-                        style={{ padding: '0.25rem 0.5rem', backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
-                      >
-                        🗑️ Excluir
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </div>
       )}
