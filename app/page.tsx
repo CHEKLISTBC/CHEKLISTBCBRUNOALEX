@@ -68,7 +68,6 @@ const initialTarefas: Tarefa[] = [
 ];
 
 export default function Page() {
-  // Controle para carregar dados do navegador apenas após a montagem do componente
   const [carregado, setCarregado] = useState(false);
 
   // Estados dos Dados
@@ -91,52 +90,35 @@ export default function Page() {
   const [novoPDV, setNovoPDV] = useState({ nome: '', codigo: '' });
   const [novaTarefa, setNovaTarefa] = useState({ categoria: '', descricao: '', abaId: 101, obrigatoria: true });
 
-  // 1. CARREGAR DADOS DO LOCALSTORAGE APÓS O MONTAGEM NO NAVEGADOR
+  // 1. CARREGAR DADOS DO LOCALSTORAGE NA MONTAGEM DO COMPONENTE
   useEffect(() => {
-    const savedUsuarios = localStorage.getItem('app_usuarios');
-    const savedPdvs = localStorage.getItem('app_pdvs');
-    const savedTarefas = localStorage.getItem('app_tarefas');
-    const savedRespostas = localStorage.getItem('app_respostas');
+    try {
+      const savedUsuarios = localStorage.getItem('app_usuarios');
+      const savedPdvs = localStorage.getItem('app_pdvs');
+      const savedTarefas = localStorage.getItem('app_tarefas');
+      const savedRespostas = localStorage.getItem('app_respostas');
 
-    setUsuarios(savedUsuarios ? JSON.parse(savedUsuarios) : initialUsers);
-    setPdvs(savedPdvs ? JSON.parse(savedPdvs) : initialPDVs);
-    setTarefas(savedTarefas ? JSON.parse(savedTarefas) : initialTarefas);
-    if (savedRespostas) setRespostas(JSON.parse(savedRespostas));
-
-    setCarregado(true);
+      setUsuarios(savedUsuarios ? JSON.parse(savedUsuarios) : initialUsers);
+      setPdvs(savedPdvs ? JSON.parse(savedPdvs) : initialPDVs);
+      setTarefas(savedTarefas ? JSON.parse(savedTarefas) : initialTarefas);
+      if (savedRespostas) setRespostas(JSON.parse(savedRespostas));
+    } catch (e) {
+      console.error('Erro ao carregar localStorage:', e);
+    } finally {
+      setCarregado(true);
+    }
   }, []);
-
-  // 2. SALVAR AUTOMATICAMENTE SEMPRE QUE HOUVER MUDANÇA
-  useEffect(() => {
-    if (carregado) {
-      localStorage.setItem('app_usuarios', JSON.stringify(usuarios));
-    }
-  }, [usuarios, carregado]);
-
-  useEffect(() => {
-    if (carregado) {
-      localStorage.setItem('app_pdvs', JSON.stringify(pdvs));
-    }
-  }, [pdvs, carregado]);
-
-  useEffect(() => {
-    if (carregado) {
-      localStorage.setItem('app_tarefas', JSON.stringify(tarefas));
-    }
-  }, [tarefas, carregado]);
-
-  useEffect(() => {
-    if (carregado) {
-      localStorage.setItem('app_respostas', JSON.stringify(respostas));
-    }
-  }, [respostas, carregado]);
 
   // Handlers do Checklist
   const handleCheckboxChange = (tarefaId: number, statusConforme: boolean) => {
-    setRespostas((prev) => ({
-      ...prev,
-      [tarefaId]: { ...prev[tarefaId], conforme: statusConforme },
-    }));
+    setRespostas((prev) => {
+      const novor = {
+        ...prev,
+        [tarefaId]: { ...prev[tarefaId], conforme: statusConforme },
+      };
+      localStorage.setItem('app_respostas', JSON.stringify(novor));
+      return novor;
+    });
 
     if (!statusConforme) {
       setModalNC({ aberto: true, tarefaId });
@@ -145,56 +127,88 @@ export default function Page() {
 
   const handleSalvarCasoNC = () => {
     if (modalNC.tarefaId !== null) {
-      setRespostas((prev) => ({
-        ...prev,
-        [modalNC.tarefaId as number]: {
-          ...prev[modalNC.tarefaId as number],
-          casoAberto: true,
-          ncDetalhes: detalhesNC,
-        },
-      }));
+      setRespostas((prev) => {
+        const novor = {
+          ...prev,
+          [modalNC.tarefaId as number]: {
+            ...prev[modalNC.tarefaId as number],
+            casoAberto: true,
+            ncDetalhes: detalhesNC,
+          },
+        };
+        localStorage.setItem('app_respostas', JSON.stringify(novor));
+        return novor;
+      });
     }
     setModalNC({ aberto: false, tarefaId: null });
     setDetalhesNC({ descricao: '', prioridade: 'MEDIA' });
   };
 
-  // Handlers de Criação e Exclusão com Salvo Imediato
+  // HANDLERS COM PERSISTÊNCIA DIRETA E IMEDIATA NO LOCALSTORAGE
+
+  // 1. Usuários
   const handleAddUsuario = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoUsuario.nome || !novoUsuario.email) return;
-    setUsuarios((prev) => [...prev, { ...novoUsuario, id: Date.now() }]);
+    setUsuarios((prev) => {
+      const listaAtualizada = [...prev, { ...novoUsuario, id: Date.now() }];
+      localStorage.setItem('app_usuarios', JSON.stringify(listaAtualizada));
+      return listaAtualizada;
+    });
     setNovoUsuario({ nome: '', email: '', perfil: 'colaborador' });
   };
 
   const handleExcluirUsuario = (id: number) => {
     if (confirm('Deseja excluir este usuário?')) {
-      setUsuarios((prev) => prev.filter((u) => u.id !== id));
+      setUsuarios((prev) => {
+        const listaAtualizada = prev.filter((u) => u.id !== id);
+        localStorage.setItem('app_usuarios', JSON.stringify(listaAtualizada));
+        return listaAtualizada;
+      });
     }
   };
 
+  // 2. PDVs
   const handleAddPDV = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoPDV.nome || !novoPDV.codigo) return;
-    setPdvs((prev) => [...prev, { ...novoPDV, id: Date.now() }]);
+    setPdvs((prev) => {
+      const listaAtualizada = [...prev, { ...novoPDV, id: Date.now() }];
+      localStorage.setItem('app_pdvs', JSON.stringify(listaAtualizada));
+      return listaAtualizada;
+    });
     setNovoPDV({ nome: '', codigo: '' });
   };
 
   const handleExcluirPDV = (id: number) => {
     if (confirm('Deseja excluir este PDV?')) {
-      setPdvs((prev) => prev.filter((p) => p.id !== id));
+      setPdvs((prev) => {
+        const listaAtualizada = prev.filter((p) => p.id !== id);
+        localStorage.setItem('app_pdvs', JSON.stringify(listaAtualizada));
+        return listaAtualizada;
+      });
     }
   };
 
+  // 3. Tarefas
   const handleAddTarefa = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novaTarefa.descricao || !novaTarefa.categoria) return;
-    setTarefas((prev) => [...prev, { ...novaTarefa, id: Date.now(), abaId: Number(novaTarefa.abaId) }]);
+    setTarefas((prev) => {
+      const listaAtualizada = [...prev, { ...novaTarefa, id: Date.now(), abaId: Number(novaTarefa.abaId) }];
+      localStorage.setItem('app_tarefas', JSON.stringify(listaAtualizada));
+      return listaAtualizada;
+    });
     setNovaTarefa({ categoria: '', descricao: '', abaId: 101, obrigatoria: true });
   };
 
   const handleExcluirTarefa = (id: number) => {
     if (confirm('Deseja excluir esta tarefa?')) {
-      setTarefas((prev) => prev.filter((t) => t.id !== id));
+      setTarefas((prev) => {
+        const listaAtualizada = prev.filter((t) => t.id !== id);
+        localStorage.setItem('app_tarefas', JSON.stringify(listaAtualizada));
+        return listaAtualizada;
+      });
     }
   };
 
