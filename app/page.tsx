@@ -44,7 +44,7 @@ interface RespostaState {
 }
 
 // ==========================================
-// DADOS INICIAIS (FALLBACK)
+// DADOS INICIAIS
 // ==========================================
 const initialUsers: User[] = [
   { id: 1, nome: 'Carlos Silva', email: 'carlos@empresa.com', perfil: 'gestor' },
@@ -67,16 +67,51 @@ const initialTarefas: Tarefa[] = [
   { id: 3, abaId: 102, categoria: 'Estoque', descricao: 'Verificar reposição de insumos no balcão', obrigatoria: true },
 ];
 
+// ==========================================
+// CUSTOM HOOK PARA ARMAZENAMENTO SEGURO (SSR SAFE)
+// ==========================================
+function usePersistentState<T>(key: string, initialValue: T) {
+  const [state, setState] = useState<T>(initialValue);
+  const [loaded, setLoaded] = useState(false);
+
+  // Lê do localStorage uma única vez quando o cliente monta o componente
+  useEffect(() => {
+    try {
+      const item = localStorage.getItem(key);
+      if (item !== null) {
+        setState(JSON.parse(item));
+      }
+    } catch (e) {
+      console.error(`Erro ao carregar chave ${key}:`, e);
+    } finally {
+      setLoaded(true);
+    }
+  }, [key]);
+
+  // Salva no localStorage somente após o carregamento inicial concluído
+  const setValue = (value: T | ((val: T) => T)) => {
+    try {
+      const valueToStore = value instanceof Function ? value(state) : value;
+      setState(valueToStore);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(key, JSON.stringify(valueToStore));
+      }
+    } catch (e) {
+      console.error(`Erro ao gravar chave ${key}:`, e);
+    }
+  };
+
+  return [state, setValue, loaded] as const;
+}
+
 export default function Page() {
-  const [carregado, setCarregado] = useState(false);
+  // Uso do Hook de Persistência Segura
+  const [usuarios, setUsuarios, loadedUsuarios] = usePersistentState<User[]>('app_usuarios_v2', initialUsers);
+  const [pdvs, setPdvs, loadedPdvs] = usePersistentState<PDV[]>('app_pdvs_v2', initialPDVs);
+  const [tarefas, setTarefas, loadedTarefas] = usePersistentState<Tarefa[]>('app_tarefas_v2', initialTarefas);
+  const [respostas, setRespostas, loadedRespostas] = usePersistentState<RespostaState>('app_respostas_v2', {});
 
-  // Estados dos Dados
-  const [usuarios, setUsuarios] = useState<User[]>([]);
-  const [pdvs, setPdvs] = useState<PDV[]>([]);
-  const [tarefas, setTarefas] = useState<Tarefa[]>([]);
-  const [respostas, setRespostas] = useState<RespostaState>({});
-
-  // Estados de Navegação e Seleção
+  // Navegação e Controle
   const [pdvSelecionado, setPdvSelecionado] = useState<number>(1);
   const [visao, setVisao] = useState<'colaborador' | 'gestor' | 'cadastros' | 'dashboard'>('colaborador');
   const [abaAtivaIndex, setAbaAtivaIndex] = useState<number>(0);
@@ -85,40 +120,20 @@ export default function Page() {
   const [modalNC, setModalNC] = useState<{ aberto: boolean; tarefaId: number | null }>({ aberto: false, tarefaId: null });
   const [detalhesNC, setDetalhesNC] = useState({ descricao: '', prioridade: 'MEDIA' });
 
-  // Formulários de Edição
+  // Forms
   const [novoUsuario, setNovoUsuario] = useState({ nome: '', email: '', perfil: 'colaborador' as User['perfil'] });
   const [novoPDV, setNovoPDV] = useState({ nome: '', codigo: '' });
   const [novaTarefa, setNovaTarefa] = useState({ categoria: '', descricao: '', abaId: 101, obrigatoria: true });
 
-  // 1. CARREGAR DADOS DO LOCALSTORAGE NA MONTAGEM DO COMPONENTE
-  useEffect(() => {
-    try {
-      const savedUsuarios = localStorage.getItem('app_usuarios');
-      const savedPdvs = localStorage.getItem('app_pdvs');
-      const savedTarefas = localStorage.getItem('app_tarefas');
-      const savedRespostas = localStorage.getItem('app_respostas');
+  const carregandoGeral = !loadedUsuarios || !loadedPdvs || !loadedTarefas || !loadedRespostas;
 
-      setUsuarios(savedUsuarios ? JSON.parse(savedUsuarios) : initialUsers);
-      setPdvs(savedPdvs ? JSON.parse(savedPdvs) : initialPDVs);
-      setTarefas(savedTarefas ? JSON.parse(savedTarefas) : initialTarefas);
-      if (savedRespostas) setRespostas(JSON.parse(savedRespostas));
-    } catch (e) {
-      console.error('Erro ao carregar localStorage:', e);
-    } finally {
-      setCarregado(true);
-    }
-  }, []);
-
-  // Handlers do Checklist
+  // Checklist Handlers
   const handleCheckboxChange = (tarefaId: number, statusConforme: boolean) => {
-    setRespostas((prev) => {
-      const novor = {
-        ...prev,
-        [tarefaId]: { ...prev[tarefaId], conforme: statusConforme },
-      };
-      localStorage.setItem('app_respostas', JSON.stringify(novor));
-      return novor;
-    });
+    const novasRespostas = {
+      ...respostas,
+      [tarefaId]: { ...respostas[tarefaId], conforme: statusConforme },
+    };
+    setRespostas(novasRespostas);
 
     if (!statusConforme) {
       setModalNC({ aberto: true, tarefaId });
@@ -127,93 +142,68 @@ export default function Page() {
 
   const handleSalvarCasoNC = () => {
     if (modalNC.tarefaId !== null) {
-      setRespostas((prev) => {
-        const novor = {
-          ...prev,
-          [modalNC.tarefaId as number]: {
-            ...prev[modalNC.tarefaId as number],
-            casoAberto: true,
-            ncDetalhes: detalhesNC,
-          },
-        };
-        localStorage.setItem('app_respostas', JSON.stringify(novor));
-        return novor;
+      setRespostas({
+        ...respostas,
+        [modalNC.tarefaId]: {
+          ...respostas[modalNC.tarefaId],
+          casoAberto: true,
+          ncDetalhes: detalhesNC,
+        },
       });
     }
     setModalNC({ aberto: false, tarefaId: null });
     setDetalhesNC({ descricao: '', prioridade: 'MEDIA' });
   };
 
-  // HANDLERS COM PERSISTÊNCIA DIRETA E IMEDIATA NO LOCALSTORAGE
-
-  // 1. Usuários
+  // Cadastros
   const handleAddUsuario = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoUsuario.nome || !novoUsuario.email) return;
-    setUsuarios((prev) => {
-      const listaAtualizada = [...prev, { ...novoUsuario, id: Date.now() }];
-      localStorage.setItem('app_usuarios', JSON.stringify(listaAtualizada));
-      return listaAtualizada;
-    });
+    const item: User = { ...novoUsuario, id: Date.now() };
+    setUsuarios([...usuarios, item]);
     setNovoUsuario({ nome: '', email: '', perfil: 'colaborador' });
   };
 
   const handleExcluirUsuario = (id: number) => {
     if (confirm('Deseja excluir este usuário?')) {
-      setUsuarios((prev) => {
-        const listaAtualizada = prev.filter((u) => u.id !== id);
-        localStorage.setItem('app_usuarios', JSON.stringify(listaAtualizada));
-        return listaAtualizada;
-      });
+      setUsuarios(usuarios.filter((u) => u.id !== id));
     }
   };
 
-  // 2. PDVs
   const handleAddPDV = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoPDV.nome || !novoPDV.codigo) return;
-    setPdvs((prev) => {
-      const listaAtualizada = [...prev, { ...novoPDV, id: Date.now() }];
-      localStorage.setItem('app_pdvs', JSON.stringify(listaAtualizada));
-      return listaAtualizada;
-    });
+    const item: PDV = { ...novoPDV, id: Date.now() };
+    setPdvs([...pdvs, item]);
     setNovoPDV({ nome: '', codigo: '' });
   };
 
   const handleExcluirPDV = (id: number) => {
     if (confirm('Deseja excluir este PDV?')) {
-      setPdvs((prev) => {
-        const listaAtualizada = prev.filter((p) => p.id !== id);
-        localStorage.setItem('app_pdvs', JSON.stringify(listaAtualizada));
-        return listaAtualizada;
-      });
+      setPdvs(pdvs.filter((p) => p.id !== id));
     }
   };
 
-  // 3. Tarefas
   const handleAddTarefa = (e: React.FormEvent) => {
     e.preventDefault();
     if (!novaTarefa.descricao || !novaTarefa.categoria) return;
-    setTarefas((prev) => {
-      const listaAtualizada = [...prev, { ...novaTarefa, id: Date.now(), abaId: Number(novaTarefa.abaId) }];
-      localStorage.setItem('app_tarefas', JSON.stringify(listaAtualizada));
-      return listaAtualizada;
-    });
+    const item: Tarefa = { ...novaTarefa, id: Date.now(), abaId: Number(novaTarefa.abaId) };
+    setTarefas([...tarefas, item]);
     setNovaTarefa({ categoria: '', descricao: '', abaId: 101, obrigatoria: true });
   };
 
   const handleExcluirTarefa = (id: number) => {
     if (confirm('Deseja excluir esta tarefa?')) {
-      setTarefas((prev) => {
-        const listaAtualizada = prev.filter((t) => t.id !== id);
-        localStorage.setItem('app_tarefas', JSON.stringify(listaAtualizada));
-        return listaAtualizada;
-      });
+      setTarefas(tarefas.filter((t) => t.id !== id));
     }
   };
 
-  if (!carregado) {
-    return <div style={{ padding: '2rem', textAlign: 'center', fontFamily: 'sans-serif' }}>Carregando dados...</div>;
+  if (carregandoGeral) {
+    return (
+      <div style={{ padding: '3rem', textAlign: 'center', fontFamily: 'sans-serif', color: '#4b5563' }}>
+        Sincronizando banco de dados local...
+      </div>
+    );
   }
 
   const abaAtual = initialAbas[abaAtivaIndex] || initialAbas[0];
@@ -222,7 +212,6 @@ export default function Page() {
 
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', backgroundColor: '#f3f4f6', minHeight: '100vh', padding: '1.5rem' }}>
-      {/* Barra de Navegação Superior */}
       <header style={{ backgroundColor: '#fff', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', color: '#111827' }}>
@@ -249,7 +238,7 @@ export default function Page() {
         </div>
       </header>
 
-      {/* 1. VISÃO DE EXECUÇÃO DO CHECKLIST */}
+      {/* Checklist */}
       {visao === 'colaborador' && (
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
           <div style={{ backgroundColor: '#fff', padding: '1rem 1.5rem', borderRadius: '8px', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -273,7 +262,7 @@ export default function Page() {
 
           <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             {tarefasDaAba.length === 0 ? (
-              <p style={{ color: '#6b7280', textAlign: 'center', margin: '2rem 0' }}>Nenhuma tarefa cadastrada nesta aba. Vá em "⚙️ Gerenciar / Cadastros" para adicionar.</p>
+              <p style={{ color: '#6b7280', textAlign: 'center', margin: '2rem 0' }}>Nenhuma tarefa nesta aba. Adicione tarefas em "⚙️ Gerenciar / Cadastros".</p>
             ) : (
               tarefasDaAba.map((tarefa) => {
                 const resp = respostas[tarefa.id] || {};
@@ -308,15 +297,15 @@ export default function Page() {
         </div>
       )}
 
-      {/* 2. ÁREA DE CADASTROS E GERENCIAMENTO (PDVs, TAREFAS, USUÁRIOS) */}
+      {/* Gerenciar Cadastros */}
       {visao === 'cadastros' && (
         <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'grid', gap: '1.5rem' }}>
-          {/* Cadastro de PDVs */}
+          {/* PDVs */}
           <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ margin: '0 0 1rem 0', color: '#111827' }}>📍 Gerenciar PDVs (Pontos de Venda)</h3>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#111827' }}>📍 Gerenciar PDVs</h3>
             <form onSubmit={handleAddPDV} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
               <input type="text" placeholder="Nome do PDV" value={novoPDV.nome} onChange={(e) => setNovoPDV({ ...novoPDV, nome: e.target.value })} style={{ flex: 1, padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
-              <input type="text" placeholder="Código (Ex: PDV-003)" value={novoPDV.codigo} onChange={(e) => setNovoPDV({ ...novoPDV, codigo: e.target.value })} style={{ width: '180px', padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
+              <input type="text" placeholder="Código" value={novoPDV.codigo} onChange={(e) => setNovoPDV({ ...novoPDV, codigo: e.target.value })} style={{ width: '180px', padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
               <button type="submit" style={{ padding: '0.5rem 1rem', backgroundColor: '#059669', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>+ Adicionar PDV</button>
             </form>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
@@ -329,11 +318,11 @@ export default function Page() {
             </ul>
           </div>
 
-          {/* Cadastro de Tarefas do Checklist */}
+          {/* Tarefas */}
           <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ margin: '0 0 1rem 0', color: '#111827' }}>📋 Gerenciar Tarefas do Checklist</h3>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#111827' }}>📋 Gerenciar Tarefas</h3>
             <form onSubmit={handleAddTarefa} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
-              <input type="text" placeholder="Categoria (ex: Higiene)" value={novaTarefa.categoria} onChange={(e) => setNovaTarefa({ ...novaTarefa, categoria: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
+              <input type="text" placeholder="Categoria" value={novaTarefa.categoria} onChange={(e) => setNovaTarefa({ ...novaTarefa, categoria: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
               <input type="text" placeholder="Descrição da Tarefa" value={novaTarefa.descricao} onChange={(e) => setNovaTarefa({ ...novaTarefa, descricao: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
               <select value={novaTarefa.abaId} onChange={(e) => setNovaTarefa({ ...novaTarefa, abaId: Number(e.target.value) })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }}>
                 {initialAbas.map((a) => (
@@ -352,9 +341,9 @@ export default function Page() {
             </ul>
           </div>
 
-          {/* Cadastro de Usuários */}
+          {/* Usuários */}
           <div style={{ backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ margin: '0 0 1rem 0', color: '#111827' }}>👥 Gerenciar Equipe / Usuários</h3>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#111827' }}>👥 Gerenciar Usuários</h3>
             <form onSubmit={handleAddUsuario} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
               <input type="text" placeholder="Nome" value={novoUsuario.nome} onChange={(e) => setNovoUsuario({ ...novoUsuario, nome: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
               <input type="email" placeholder="E-mail" value={novoUsuario.email} onChange={(e) => setNovoUsuario({ ...novoUsuario, email: e.target.value })} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }} required />
@@ -377,23 +366,22 @@ export default function Page() {
         </div>
       )}
 
-      {/* 3. CENTRAL DE CASOS */}
+      {/* Central e Dashboard */}
       {visao === 'gestor' && (
         <div style={{ maxWidth: '1000px', margin: '0 auto', backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px' }}>
           <h2>Central de Ocorrências</h2>
-          <p style={{ color: '#6b7280' }}>Monitore os itens não conformes registrados pelas equipes de campo.</p>
+          <p style={{ color: '#6b7280' }}>Monitore os itens não conformes cadastrados no sistema.</p>
         </div>
       )}
 
-      {/* 4. DASHBOARD */}
       {visao === 'dashboard' && (
         <div style={{ maxWidth: '1000px', margin: '0 auto', backgroundColor: '#fff', padding: '1.5rem', borderRadius: '8px' }}>
           <h2>Dashboard de Desempenho</h2>
-          <p style={{ color: '#6b7280' }}>Visão geral do índice de conformidades gerais.</p>
+          <p style={{ color: '#6b7280' }}>Resumo de métricas operacionais.</p>
         </div>
       )}
 
-      {/* MODAL DE NÃO CONFORMIDADE */}
+      {/* Modal NC */}
       {modalNC.aberto && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
           <div style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '1.5rem', maxWidth: '450px', width: '100%' }}>
